@@ -3,78 +3,122 @@ import AppLayout from '../layouts/AppLayout.astro';
 ---
 
 <AppLayout title="Feature Checklist">
-	<div class="features-container">
+	<div class="features-view">
 		<div class="page-header">
-			<h1 class="serif">Feature Checklist</h1>
-			<p class="subtitle">Suggest and vote on new features for the dashboard.</p>
+			<div class="header-content">
+				<h1 class="serif">Feature Checklist</h1>
+				<p class="subtitle">Beheer dashboard feature requests en toewijzingen.</p>
+			</div>
+			<button id="open-modal-btn" class="btn-primary">Nieuwe Request</button>
 		</div>
 
-		<div class="features-grid">
-			<div class="feature-form card">
-				<h3>Submit a Request</h3>
-				<form id="feature-form">
-					<div class="form-group">
-						<label for="title">Title</label>
-						<input type="text" id="title" name="title" placeholder="What should we add?" required />
-					</div>
-					<div class="form-group">
-						<label for="description">Description</label>
-						<textarea id="description" name="description" placeholder="Describe the feature in detail..." rows="4"></textarea>
-					</div>
-					<button type="submit" class="btn-primary" style="width: 100%;">Submit Request</button>
-				</form>
+		<div class="list-filters card">
+			<div class="filter-group">
+				<button class="filter-btn active" data-status="all">Alles</button>
+				<button class="filter-btn" data-status="pending">Pending</button>
+				<button class="filter-btn" data-status="planned">Planned</button>
+				<button class="filter-btn" data-status="in-progress">In Progress</button>
+				<button class="filter-btn" data-status="completed">Completed</button>
 			</div>
+		</div>
+		
+		<div id="features-loading" class="loading">Gegevens laden...</div>
+		<div id="features-empty" class="empty-state" style="display: none;">Geen feature requests gevonden.</div>
+		<div id="features-grid" class="features-grid"></div>
+	</div>
 
-			<div class="feature-list">
-				<div class="list-filters">
-					<button class="filter-btn active" data-status="all">All</button>
-					<button class="filter-btn" data-status="pending">Pending</button>
-					<button class="filter-btn" data-status="planned">Planned</button>
-					<button class="filter-btn" data-status="in-progress">In Progress</button>
-					<button class="filter-btn" data-status="completed">Completed</button>
-				</div>
-				
-				<div id="features-loading" class="loading">Loading requests...</div>
-				<div id="features-empty" class="empty-state" style="display: none;">No feature requests found.</div>
-				<div id="features-container" class="list-container"></div>
+	<!-- Modal for Adding/Editing -->
+	<div id="feature-modal" class="modal">
+		<div class="modal-content card">
+			<div class="modal-header">
+				<h3 id="modal-title">Nieuwe Request</h3>
+				<button id="close-modal-btn" class="close-btn">&times;</button>
 			</div>
+			<form id="feature-form">
+				<input type="hidden" id="feature-id" name="id" />
+				<div class="form-group">
+					<label for="title">Titel</label>
+					<input type="text" id="title" name="title" placeholder="Wat moet er toegevoegd worden?" required />
+				</div>
+				<div class="form-group">
+					<label for="description">Beschrijving</label>
+					<textarea id="description" name="description" placeholder="Beschrijf de feature..." rows="4"></textarea>
+				</div>
+				<div class="form-row">
+					<div class="form-group">
+						<label for="status">Status</label>
+						<select id="status" name="status">
+							<option value="pending">Pending</option>
+							<option value="planned">Planned</option>
+							<option value="in-progress">In Progress</option>
+							<option value="completed">Completed</option>
+						</select>
+					</div>
+					<div class="form-group">
+						<label for="assigned_to">Toewijzen aan</label>
+						<select id="assigned_to" name="assigned_to">
+							<option value="">Niemand</option>
+						</select>
+					</div>
+				</div>
+				<div class="modal-actions">
+					<button type="button" id="cancel-btn" class="btn-secondary">Annuleren</button>
+					<button type="submit" class="btn-primary">Opslaan</button>
+				</div>
+			</form>
 		</div>
 	</div>
 
 	<script>
 		import { supabase } from '../lib/supabase';
 
-		const form = document.getElementById('feature-form') as HTMLFormElement;
-		const container = document.getElementById('features-container');
+		const grid = document.getElementById('features-grid');
 		const loading = document.getElementById('features-loading');
 		const empty = document.getElementById('features-empty');
 		const filterBtns = document.querySelectorAll('.filter-btn');
-
+		const modal = document.getElementById('feature-modal');
+		const form = document.getElementById('feature-form') as HTMLFormElement;
+		const userSelect = document.getElementById('assigned_to') as HTMLSelectElement;
+		
 		let currentStatus = 'all';
+		let allProfiles = [];
+
+		async function loadUsers() {
+			const { data } = await supabase.from('profiles').select('id, full_name, username');
+			if (data) {
+				allProfiles = data;
+				data.forEach(profile => {
+					const option = document.createElement('option');
+					option.value = profile.id;
+					option.textContent = profile.full_name || profile.username;
+					userSelect.appendChild(option);
+				});
+			}
+		}
 
 		async function loadFeatures() {
 			loading!.style.display = 'block';
-			container!.innerHTML = '';
+			grid!.innerHTML = '';
 			empty!.style.display = 'none';
 
 			let query = supabase
 				.from('feature_requests')
 				.select(`
 					*,
-					profiles:assigned_to (
+					assignee:profiles!assigned_to (
+						id,
 						full_name,
 						username,
 						avatar_url
 					)
 				`)
-				.order('upvotes', { ascending: false });
+				.order('created_at', { ascending: false });
 
 			if (currentStatus !== 'all') {
 				query = query.eq('status', currentStatus);
 			}
 
 			const { data, error } = await query;
-
 			loading!.style.display = 'none';
 
 			if (error) {
@@ -91,75 +135,89 @@ import AppLayout from '../layouts/AppLayout.astro';
 				const card = document.createElement('div');
 				card.className = 'feature-card card';
 				
-				// Handle potential nested profile from Supabase join
-				const assignee = feature.profiles;
-				const assigneeName = assignee ? (assignee.full_name || assignee.username) : null;
+				const assignee = feature.assignee;
+				const assigneeName = assignee ? (assignee.full_name || assignee.username) : 'Niet toegewezen';
 				const assigneeAvatar = assignee?.avatar_url || `https://ui-avatars.com/api/?name=${assigneeName}&background=1c1917&color=c5a059`;
 
 				card.innerHTML = `
-					<div class="feature-vote">
-						<button class="vote-btn" data-id="${feature.id}">
-							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
-							<span>${feature.upvotes}</span>
-						</button>
-					</div>
 					<div class="feature-content">
 						<div class="feature-top">
-							<h4>${feature.title}</h4>
-							<div class="feature-badges">
-								${assigneeName ? `
-									<span class="assignee-badge" title="Assigned to ${assigneeName}">
-										<img src="${assigneeAvatar}" class="assignee-avatar" />
-										${assigneeName}
-									</span>
-								` : ''}
-								<span class="status-badge status-${feature.status}">${feature.status}</span>
-							</div>
+							<span class="status-badge status-${feature.status}">${feature.status}</span>
+							<button class="edit-btn" data-id="${feature.id}">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+							</button>
 						</div>
-						<p>${feature.description || 'No description provided.'}</p>
+						<h3 class="feature-title">${feature.title}</h3>
+						<p class="feature-desc">${feature.description || 'Geen beschrijving.'}</p>
+						<div class="feature-footer">
+							<div class="assignee-info">
+								<img src="${assigneeAvatar}" class="assignee-avatar-small" />
+								<span>${assigneeName}</span>
+							</div>
+							<span class="date">${new Date(feature.created_at).toLocaleDateString()}</span>
+						</div>
 					</div>
 				`;
-				container?.appendChild(card);
+				grid?.appendChild(card);
 			});
 
-			// Add vote listeners
-			document.querySelectorAll('.vote-btn').forEach(btn => {
-				btn.addEventListener('click', async (e) => {
+			document.querySelectorAll('.edit-btn').forEach(btn => {
+				btn.addEventListener('click', (e) => {
 					const id = (e.currentTarget as HTMLButtonElement).dataset.id;
-					if (id) upvote(id);
+					const feature = data.find(f => f.id === id);
+					if (feature) openEditModal(feature);
 				});
 			});
 		}
 
-		async function upvote(id: string) {
-			const { error } = await supabase.rpc('upvote_feature_request', { request_id: id });
-			if (error) {
-				console.error('Error upvoting:', error);
-			} else {
-				loadFeatures();
-			}
+		function openEditModal(feature) {
+			document.getElementById('modal-title')!.textContent = 'Request Bewerken';
+			document.getElementById('feature-id')!.setAttribute('value', feature.id);
+			(document.getElementById('title') as HTMLInputElement).value = feature.title;
+			(document.getElementById('description') as HTMLTextAreaElement).value = feature.description || '';
+			(document.getElementById('status') as HTMLSelectElement).value = feature.status;
+			(document.getElementById('assigned_to') as HTMLSelectElement).value = feature.assigned_to || '';
+			modal!.style.display = 'flex';
 		}
+
+		document.getElementById('open-modal-btn')?.addEventListener('click', () => {
+			document.getElementById('modal-title')!.textContent = 'Nieuwe Request';
+			form.reset();
+			document.getElementById('feature-id')!.setAttribute('value', '');
+			modal!.style.display = 'flex';
+		});
+
+		const closeModal = () => modal!.style.display = 'none';
+		document.getElementById('close-modal-btn')?.addEventListener('click', closeModal);
+		document.getElementById('cancel-btn')?.addEventListener('click', closeModal);
 
 		form?.addEventListener('submit', async (e) => {
 			e.preventDefault();
 			const formData = new FormData(form);
+			const id = formData.get('id');
 			const { data: { session } } = await supabase.auth.getSession();
 
-			if (!session) {
-				alert('You must be logged in to submit a request.');
-				return;
-			}
+			if (!session) return alert('Log in om dit te doen.');
 
-			const { error } = await supabase.from('feature_requests').insert({
+			const payload = {
 				title: formData.get('title'),
 				description: formData.get('description'),
-				user_id: session.user.id
-			});
+				status: formData.get('status'),
+				assigned_to: formData.get('assigned_to') || null,
+			};
 
-			if (error) {
-				alert('Error submitting request: ' + error.message);
+			let error;
+			if (id) {
+				const { error: err } = await supabase.from('feature_requests').update(payload).eq('id', id);
+				error = err;
 			} else {
-				form.reset();
+				const { error: err } = await supabase.from('feature_requests').insert({ ...payload, user_id: session.user.id });
+				error = err;
+			}
+
+			if (error) alert('Fout: ' + error.message);
+			else {
+				closeModal();
 				loadFeatures();
 			}
 		});
@@ -173,77 +231,35 @@ import AppLayout from '../layouts/AppLayout.astro';
 			});
 		});
 
+		loadUsers();
 		loadFeatures();
 	</script>
 </AppLayout>
 
 <style>
-	.features-container {
-		max-width: 1200px;
-		margin: 0 auto;
+	.features-view {
+		width: 100%;
 	}
 
 	.page-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-end;
 		margin-bottom: 3rem;
 	}
 
-	.page-header h1 {
-		font-size: 2.5rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.subtitle {
-		color: var(--color-text-muted);
-		font-size: 1.1rem;
-	}
-
-	.features-grid {
-		display: grid;
-		grid-template-columns: 350px 1fr;
-		gap: 2rem;
-		align-items: start;
-	}
-
-	.card {
-		background: var(--color-card);
-		border: 1px solid var(--color-border);
-		border-radius: 16px;
-		padding: 2rem;
-	}
-
-	.form-group {
-		margin-bottom: 1.5rem;
-	}
-
-	.form-group label {
-		display: block;
-		margin-bottom: 0.5rem;
-		font-size: 0.9rem;
-		font-weight: 500;
-	}
-
-	.form-group input, .form-group textarea {
-		width: 100%;
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		padding: 0.75rem 1rem;
-		color: var(--color-text);
-		font-family: inherit;
-		outline: none;
-		transition: border-color 0.3s;
-	}
-
-	.form-group input:focus, .form-group textarea:focus {
-		border-color: var(--color-primary);
-	}
+	.page-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
 	.list-filters {
-		display: flex;
-		gap: 0.5rem;
+		padding: 1rem;
 		margin-bottom: 2rem;
-		flex-wrap: wrap;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
 	}
+
+	.filter-group { display: flex; gap: 0.5rem; }
 
 	.filter-btn {
 		background: var(--color-surface);
@@ -256,109 +272,85 @@ import AppLayout from '../layouts/AppLayout.astro';
 		transition: all 0.3s;
 	}
 
-	.filter-btn:hover {
-		border-color: var(--color-primary);
-		color: var(--color-text);
+	.filter-btn:hover { border-color: var(--color-primary); color: var(--color-text); }
+	.filter-btn.active { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
+
+	.features-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+		gap: 1.5rem;
 	}
 
-	.filter-btn.active {
-		background: var(--color-primary);
-		color: var(--color-bg);
-		border-color: var(--color-primary);
-	}
-
-	.list-container {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
+	.card {
+		background: var(--color-card);
+		border: 1px solid var(--color-border);
+		border-radius: 16px;
 	}
 
 	.feature-card {
-		display: flex;
-		gap: 1.5rem;
 		padding: 1.5rem;
-		transition: transform 0.2s;
+		display: flex;
+		flex-direction: column;
+		transition: transform 0.2s, border-color 0.2s;
 	}
 
 	.feature-card:hover {
-		transform: translateX(4px);
-	}
-
-	.feature-vote {
-		flex-shrink: 0;
-	}
-
-	.vote-btn {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.25rem;
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		color: var(--color-text);
-		padding: 0.75rem;
-		border-radius: 12px;
-		cursor: pointer;
-		min-width: 50px;
-		transition: all 0.3s;
-	}
-
-	.vote-btn:hover {
+		transform: translateY(-4px);
 		border-color: var(--color-primary);
-		color: var(--color-primary);
-	}
-
-	.vote-btn span {
-		font-weight: 700;
-		font-size: 1rem;
-	}
-
-	.feature-content {
-		flex-grow: 1;
 	}
 
 	.feature-top {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 0.5rem;
-		gap: 1rem;
+		margin-bottom: 1rem;
 	}
 
-	.feature-badges {
+	.edit-btn {
+		background: transparent;
+		border: none;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		padding: 0.5rem;
+		border-radius: 8px;
+		transition: all 0.2s;
+	}
+
+	.edit-btn:hover {
+		background: var(--color-surface);
+		color: var(--color-primary);
+	}
+
+	.feature-title { font-size: 1.25rem; margin-bottom: 0.75rem; }
+	.feature-desc { color: var(--color-text-muted); font-size: 0.95rem; line-height: 1.6; flex-grow: 1; margin-bottom: 1.5rem; }
+
+	.feature-footer {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding-top: 1rem;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.assignee-info {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-	}
-
-	.assignee-badge {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		padding: 0.2rem 0.6rem;
-		border-radius: 100px;
-		font-size: 0.75rem;
+		font-size: 0.85rem;
 		font-weight: 500;
-		color: var(--color-text);
 	}
 
-	.assignee-avatar {
-		width: 16px;
-		height: 16px;
-		border-radius: 4px;
-		object-fit: cover;
+	.assignee-avatar-small {
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
 		border: 1px solid var(--color-primary);
 	}
 
-	.feature-top h4 {
-		font-size: 1.1rem;
-		margin: 0;
-	}
+	.date { font-size: 0.75rem; color: var(--color-text-muted); }
 
 	.status-badge {
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		font-weight: 700;
@@ -371,11 +363,64 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.status-in-progress { background: #d97706; color: white; }
 	.status-completed { background: #059669; color: white; }
 
-	.feature-content p {
-		color: var(--color-text-muted);
-		font-size: 0.95rem;
-		line-height: 1.5;
-		margin: 0;
+	/* Modal */
+	.modal {
+		position: fixed;
+		top: 0; left: 0; width: 100%; height: 100%;
+		background: rgba(0,0,0,0.8);
+		backdrop-filter: blur(4px);
+		display: none;
+		justify-content: center;
+		align-items: center;
+		z-index: 1000;
+		padding: 1rem;
+	}
+
+	.modal-content {
+		width: 100%;
+		max-width: 600px;
+		padding: 2rem;
+	}
+
+	.modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 2rem;
+	}
+
+	.close-btn {
+		background: transparent;
+		border: none;
+		color: var(--color-text);
+		font-size: 1.5rem;
+		cursor: pointer;
+	}
+
+	.form-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+	}
+
+	.form-group { margin-bottom: 1.5rem; }
+	.form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 500; }
+	.form-group input, .form-group textarea, .form-group select {
+		width: 100%;
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		padding: 0.75rem 1rem;
+		color: var(--color-text);
+		font-family: inherit;
+		outline: none;
+	}
+
+	.modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 1rem;
+		margin-top: 1rem;
 	}
 
 	.loading, .empty-state {
@@ -385,11 +430,5 @@ import AppLayout from '../layouts/AppLayout.astro';
 		background: var(--color-card);
 		border-radius: 16px;
 		border: 1px dashed var(--color-border);
-	}
-
-	@media (max-width: 900px) {
-		.features-grid {
-			grid-template-columns: 1fr;
-		}
 	}
 </style>

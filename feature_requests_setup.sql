@@ -6,10 +6,13 @@ CREATE TABLE IF NOT EXISTS public.feature_requests (
     title TEXT NOT NULL,
     description TEXT,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in-progress', 'completed', 'planned')),
-    upvotes INTEGER DEFAULT 0,
+    priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    assigned_to UUID REFERENCES auth.users(id) ON DELETE SET NULL
+    assigned_to UUID REFERENCES public.profiles(id) ON DELETE SET NULL
 );
+
+-- Ensure Supabase knows about the relationship for joins
+COMMENT ON COLUMN public.feature_requests.assigned_to IS '{"foreignKey": "public.profiles.id"}';
 
 -- Enable RLS
 ALTER TABLE public.feature_requests ENABLE ROW LEVEL SECURITY;
@@ -23,16 +26,6 @@ CREATE POLICY "Users can insert their own feature requests"
 ON public.feature_requests FOR INSERT 
 WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update their own feature requests" 
+CREATE POLICY "Users can update feature requests" 
 ON public.feature_requests FOR UPDATE 
-USING (auth.uid() = user_id);
-
--- Optional: Function to handle upvotes (preventing double voting would require a separate table, but this is a simple start)
-CREATE OR REPLACE FUNCTION upvote_feature_request(request_id UUID)
-RETURNS void AS $$
-BEGIN
-    UPDATE public.feature_requests
-    SET upvotes = upvotes + 1
-    WHERE id = request_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+USING (auth.role() = 'authenticated');
