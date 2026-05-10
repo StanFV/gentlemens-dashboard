@@ -1,18 +1,21 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase';
 
-// Dummy data
-const stats = [
-	{ label: 'Active Projects', value: '12', trend: '+14%' },
-	{ label: 'Total Members', value: '48', trend: '+2' },
-	{ label: 'Monthly Budget', value: '€4.2k', trend: '-5%' },
+// Fetch data from Supabase
+const { data: statsData } = await supabase.from('stats').select('*');
+const { data: projectsData } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+const { data: activitiesData } = await supabase.from('activities').select('*').order('created_at', { ascending: false }).limit(5);
+
+// Fallback data if DB is empty or error
+const stats = statsData || [
+	{ label: 'Active Projects', value: '0', trend: '0%' },
+	{ label: 'Total Members', value: '0', trend: '0' },
+	{ label: 'Monthly Budget', value: '€0', trend: '0%' },
 ];
 
-const projects = [
-	{ title: 'Sociëteit Website', category: 'Design', progress: 65 },
-	{ title: 'Whiskey Inventory', category: 'Logistics', progress: 100 },
-	{ title: 'Annual Gala 2026', category: 'Events', progress: 20 },
-];
+const projects = projectsData || [];
+const activities = activitiesData || [];
 ---
 
 <Layout title="Gentlemen's Dashboard">
@@ -120,18 +123,12 @@ const projects = [
 								<h2 class="serif">Recent Log</h2>
 							</div>
 							<div class="activity-items">
-								<div class="a-item">
-									<span class="a-time">14:20</span>
-									<p class="a-desc">New member <span class="white">James B.</span> approved</p>
-								</div>
-								<div class="a-item">
-									<span class="a-time">Yesterday</span>
-									<p class="a-desc">Vault security <span class="white">v1.2</span> deployed</p>
-								</div>
-								<div class="a-item">
-									<span class="a-time">May 09</span>
-									<p class="a-desc">Gala planning <span class="white">Phase 1</span> complete</p>
-								</div>
+								{activities.map(activity => (
+									<div class="a-item">
+										<span class="a-time">{new Date(activity.created_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>
+										<p class="a-desc">{activity.description}</p>
+									</div>
+								))}
 							</div>
 						</section>
 					</div>
