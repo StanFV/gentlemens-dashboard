@@ -26,13 +26,25 @@ const projects = [
 			
 			<nav class="nav">
 				<a href="#" class="nav-item active">
-					<span class="nav-dot"></span>
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
 					Dashboard
 				</a>
-				<a href="#" class="nav-item">Projects</a>
-				<a href="#" class="nav-item">Members</a>
-				<a href="#" class="nav-item">Treasury</a>
-				<a href="#" class="nav-item">Archive</a>
+				<a href="#" class="nav-item">
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+					Projects
+				</a>
+				<a href="#" class="nav-item">
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+					Members
+				</a>
+				<a href="#" class="nav-item">
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+					Treasury
+				</a>
+				<a href="#" class="nav-item">
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><polyline points="21 8 21 21 3 21 3 8"/><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M10 12h4"/></svg>
+					Archive
+				</a>
 			</nav>
 
 			<div class="sidebar-bottom">
@@ -136,7 +148,7 @@ const projects = [
 		background: var(--color-bg);
 	}
 
-	/* --- Sidebar (Refined for Luxury) --- */
+	/* --- Sidebar --- */
 	.sidebar {
 		width: 280px;
 		background: var(--color-surface);
@@ -159,10 +171,18 @@ const projects = [
 	.nav-item {
 		text-decoration: none; color: var(--color-text-muted);
 		padding: 0.75rem 0; font-size: 0.95rem; font-weight: 400;
-		transition: color 0.3s; display: flex; align-items: center; gap: 0.75rem;
+		transition: all 0.3s; display: flex; align-items: center; gap: 1rem;
 	}
 	.nav-item:hover, .nav-item.active { color: var(--color-text); }
-	.nav-dot { width: 4px; height: 4px; background: var(--color-primary); border-radius: 50%; }
+	
+	.nav-icon {
+		color: var(--color-primary);
+		opacity: 0.7;
+		transition: opacity 0.3s;
+	}
+	.nav-item:hover .nav-icon, .nav-item.active .nav-icon {
+		opacity: 1;
+	}
 
 	.user-pill {
 		background: var(--color-card); border: 1px solid var(--color-border);
@@ -250,7 +270,7 @@ const projects = [
 		.brand, .sidebar-bottom { display: none; }
 		.nav { flex-direction: row; justify-content: space-around; width: 100%; gap: 0; }
 		.nav-item { flex-direction: column; font-size: 0.65rem; padding: 0.5rem; gap: 0.2rem; }
-		.nav-dot { margin-bottom: 2px; }
+		.nav-icon { width: 20px; height: 20px; }
 
 		.main { height: auto; padding-bottom: 80px; }
 		.header { padding: 1rem 1.5rem; }
