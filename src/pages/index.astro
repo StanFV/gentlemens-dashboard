@@ -1,96 +1,365 @@
 ---
 import Layout from '../layouts/Layout.astro';
+
+// Dummy data voor projecten
+const projects = [
+	{ title: 'De Societeit Website', status: 'In behandeling', progress: 65, tag: 'Web' },
+	{ title: 'Inkoop Whiskey Voorraad', status: 'Voltooid', progress: 100, tag: 'Logistiek' },
+	{ title: 'Jaarlijks Gala 2026', status: 'Planning', progress: 20, tag: 'Event' },
+];
+
+// Dummy data voor recente activiteiten
+const activities = [
+	{ time: '14:20', desc: 'Nieuw lid geaccepteerd: James B.', icon: '👤' },
+	{ time: 'Gisteren', desc: 'Systeem-update uitgevoerd naar v1.2', icon: '⚙️' },
+	{ time: 'Gisteren', desc: 'Project "Gala" aangemaakt', icon: '📅' },
+];
 ---
 
 <Layout title="Gentlemen's Dashboard">
-	<main>
-		<header>
-			<h1>Gentlemen's <span class="text-gradient">Dashboard</span></h1>
-			<p class="subtitle">Welkom bij de sociëteit.</p>
-		</header>
+	<div class="app-container">
+		<!-- Sidebar -->
+		<nav class="sidebar">
+			<div class="logo">
+				<span class="logo-icon">G</span>
+				<span class="logo-text">Gentlemen's</span>
+			</div>
+			<ul class="nav-links">
+				<li class="active"><a href="#">Dashboard</a></li>
+				<li><a href="#">Projecten</a></li>
+				<li><a href="#">Ledenlijst</a></li>
+				<li><a href="#">Financiën</a></li>
+				<li><a href="#">Instellingen</a></li>
+			</ul>
+			<div class="sidebar-footer">
+				<div class="profile">
+					<div class="avatar">S</div>
+					<div class="profile-info">
+						<span class="name">Stan F.V.</span>
+						<span class="role">Beheerder</span>
+					</div>
+				</div>
+			</div>
+		</nav>
 
-		<div class="grid">
-			<section class="card">
-				<h2>Status</h2>
-				<p>Klaar voor gebruik.</p>
-			</section>
-			<section class="card">
-				<h2>Projecten</h2>
-				<p>Nog geen actieve projecten.</p>
-			</section>
-			<section class="card">
-				<h2>Logboek</h2>
-				<p>Systeem geïnitialiseerd.</p>
-			</section>
-		</div>
-	</main>
+		<!-- Main Content -->
+		<main class="content">
+			<header class="top-bar">
+				<div class="search-bar">
+					<input type="text" placeholder="Zoek binnen de sociëteit..." />
+				</div>
+				<div class="top-actions">
+					<button class="btn-icon">🔔</button>
+					<button class="btn-primary">+ Nieuw Project</button>
+				</div>
+			</header>
+
+			<div class="dashboard-grid">
+				<!-- Welkomst Sectie -->
+				<section class="welcome-card">
+					<div class="welcome-text">
+						<h1>Goedenavond, <span class="text-gradient">Gentlemen</span></h1>
+						<p>Het dashboard is up-to-date. Er zijn 3 lopende projecten die aandacht vereisen.</p>
+					</div>
+				</section>
+
+				<!-- Stats -->
+				<div class="stats-row">
+					<div class="stat-card">
+						<span class="stat-label">Actieve Projecten</span>
+						<span class="stat-value">12</span>
+						<span class="stat-change positive">+2 deze week</span>
+					</div>
+					<div class="stat-card">
+						<span class="stat-label">Leden</span>
+						<span class="stat-value">48</span>
+						<span class="stat-change">Stabiel</span>
+					</div>
+					<div class="stat-card">
+						<span class="stat-label">Budget</span>
+						<span class="stat-value">€ 4.250</span>
+						<span class="stat-change negative">-5% (Gala)</span>
+					</div>
+				</div>
+
+				<!-- Projecten Lijst -->
+				<section class="panel projects-panel">
+					<div class="panel-header">
+						<h2>Lopende Projecten</h2>
+						<a href="#" class="view-all">Alles bekijken</a>
+					</div>
+					<div class="project-list">
+						{projects.map(project => (
+							<div class="project-item">
+								<div class="project-info">
+									<span class="project-tag">{project.tag}</span>
+									<h3>{project.title}</h3>
+									<span class="project-status">{project.status}</span>
+								</div>
+								<div class="project-progress">
+									<div class="progress-bar">
+										<div class="progress-fill" style={`width: ${project.progress}%`}></div>
+									</div>
+									<span class="progress-text">{project.progress}%</span>
+								</div>
+							</div>
+						))}
+					</div>
+				</section>
+
+				<!-- Logboek -->
+				<section class="panel activity-panel">
+					<div class="panel-header">
+						<h2>Recent Logboek</h2>
+					</div>
+					<div class="activity-list">
+						{activities.map(activity => (
+							<div class="activity-item">
+								<div class="activity-icon">{activity.icon}</div>
+								<div class="activity-content">
+									<p>{activity.desc}</p>
+									<span class="activity-time">{activity.time}</span>
+								</div>
+							</div>
+						))}
+					</div>
+				</section>
+			</div>
+		</main>
+	</div>
 </Layout>
 
 <style>
-	main {
-		margin: auto;
-		padding: 2rem;
-		width: 1000px;
-		max-width: calc(100% - 2rem);
-		line-height: 1.6;
-	}
-	
-	header {
-		text-align: center;
-		margin-bottom: 4rem;
-		border-bottom: 1px solid var(--color-secondary);
-		padding-bottom: 2rem;
+	.app-container {
+		display: flex;
+		min-height: 100vh;
 	}
 
-	h1 {
-		font-size: 4rem;
-		font-weight: 700;
-		line-height: 1;
-		margin-bottom: 0.5em;
+	/* --- Sidebar Styles --- */
+	.sidebar {
+		width: 260px;
+		background-color: var(--color-primary);
+		border-right: 1px solid var(--color-secondary);
+		display: flex;
+		flex-direction: column;
+		padding: 2rem 0;
+		position: sticky;
+		top: 0;
+		height: 100vh;
 	}
+
+	.logo {
+		padding: 0 2rem;
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 3rem;
+	}
+
+	.logo-icon {
+		background: var(--color-accent);
+		color: var(--color-bg);
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-family: 'Playfair Display', serif;
+		font-weight: 900;
+		font-size: 1.5rem;
+		border-radius: 4px;
+	}
+
+	.logo-text {
+		font-family: 'Playfair Display', serif;
+		font-size: 1.4rem;
+		color: var(--color-text);
+		font-weight: 700;
+	}
+
+	.nav-links {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		flex-grow: 1;
+	}
+
+	.nav-links li {
+		margin-bottom: 0.5rem;
+	}
+
+	.nav-links a {
+		color: var(--color-text-muted);
+		text-decoration: none;
+		padding: 0.8rem 2rem;
+		display: block;
+		transition: all 0.2s ease;
+		border-left: 3px solid transparent;
+	}
+
+	.nav-links li.active a, .nav-links a:hover {
+		color: var(--color-accent);
+		background: rgba(197, 160, 89, 0.05);
+		border-left-color: var(--color-accent);
+	}
+
+	.sidebar-footer {
+		padding: 1.5rem 2rem;
+		border-top: 1px solid var(--color-secondary);
+	}
+
+	.profile {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.avatar {
+		width: 40px;
+		height: 40px;
+		background: var(--color-secondary);
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-accent);
+		border: 1px solid var(--color-accent);
+	}
+
+	.profile-info {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.name { font-weight: 600; font-size: 0.9rem; }
+	.role { font-size: 0.75rem; color: var(--color-text-muted); }
+
+	/* --- Main Content Styles --- */
+	.content {
+		flex-grow: 1;
+		background: var(--color-bg);
+		padding: 2rem;
+		max-width: calc(100% - 260px);
+	}
+
+	.top-bar {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 3rem;
+	}
+
+	.search-bar input {
+		background: var(--color-primary);
+		border: 1px solid var(--color-secondary);
+		padding: 0.6rem 1.5rem;
+		border-radius: 20px;
+		color: var(--color-text);
+		width: 300px;
+	}
+
+	.btn-primary {
+		background: var(--color-accent);
+		color: var(--color-bg);
+		border: none;
+		padding: 0.6rem 1.2rem;
+		border-radius: 6px;
+		font-weight: 600;
+		cursor: pointer;
+		margin-left: 1rem;
+	}
+
+	.btn-icon {
+		background: transparent;
+		border: 1px solid var(--color-secondary);
+		color: var(--color-text);
+		padding: 0.6rem;
+		border-radius: 6px;
+		cursor: pointer;
+	}
+
+	/* --- Dashboard Grid --- */
+	.dashboard-grid {
+		display: grid;
+		grid-template-columns: 2fr 1fr;
+		gap: 2rem;
+	}
+
+	.welcome-card {
+		grid-column: span 2;
+		background: linear-gradient(to right, var(--color-primary), transparent);
+		padding: 3rem;
+		border-radius: 12px;
+		border-left: 4px solid var(--color-accent);
+	}
+
+	.welcome-card h1 { font-size: 2.5rem; margin-top: 0; }
+
+	.stats-row {
+		grid-column: span 2;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 2rem;
+	}
+
+	.stat-card {
+		background: var(--color-primary);
+		padding: 1.5rem;
+		border-radius: 12px;
+		border: 1px solid var(--color-secondary);
+	}
+
+	.stat-label { color: var(--color-text-muted); font-size: 0.9rem; display: block; margin-bottom: 0.5rem; }
+	.stat-value { font-size: 1.8rem; font-weight: 700; display: block; color: var(--color-accent); }
+	.stat-change { font-size: 0.8rem; margin-top: 0.5rem; display: block; }
+	.positive { color: #82ac92; }
+	.negative { color: #ac8282; }
+
+	.panel {
+		background: var(--color-primary);
+		border-radius: 12px;
+		border: 1px solid var(--color-secondary);
+		padding: 1.5rem;
+	}
+
+	.panel-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		border-bottom: 1px solid var(--color-secondary);
+		padding-bottom: 1rem;
+	}
+
+	.panel-header h2 { font-size: 1.2rem; margin: 0; }
+	.view-all { color: var(--color-accent); text-decoration: none; font-size: 0.8rem; }
+
+	/* --- Projects --- */
+	.project-list { display: flex; flex-direction: column; gap: 1.5rem; }
+	.project-item { display: flex; flex-direction: column; gap: 0.8rem; }
+	.project-info { display: flex; justify-content: space-between; align-items: flex-start; }
+	.project-tag { font-size: 0.6rem; background: var(--color-secondary); color: var(--color-accent); padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 1px; }
+	.project-status { font-size: 0.8rem; color: var(--color-text-muted); }
+	.project-progress { display: flex; align-items: center; gap: 1rem; }
+	.progress-bar { flex-grow: 1; height: 6px; background: var(--color-bg); border-radius: 3px; overflow: hidden; }
+	.progress-fill { height: 100%; background: var(--color-accent); }
+	.progress-text { font-size: 0.8rem; min-width: 3ch; }
+
+	/* --- Activity --- */
+	.activity-list { display: flex; flex-direction: column; gap: 1.2rem; }
+	.activity-item { display: flex; gap: 1rem; align-items: flex-start; }
+	.activity-icon { font-size: 1.2rem; }
+	.activity-content p { margin: 0; font-size: 0.9rem; }
+	.activity-time { font-size: 0.75rem; color: var(--color-text-muted); }
 
 	.text-gradient {
 		background-image: linear-gradient(45deg, var(--color-accent), #f3e5ab);
 		-webkit-background-clip: text;
 		-webkit-text-fill-color: transparent;
-		background-size: 400%;
-		background-position: 0%;
 	}
 
-	.subtitle {
-		font-style: italic;
-		color: var(--color-text-muted);
-		font-size: 1.2rem;
-	}
-
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(24ch, 1fr));
-		gap: 2rem;
-		padding: 0;
-	}
-
-	.card {
-		list-style: none;
-		display: flex;
-		flex-direction: column;
-		padding: 1.5rem;
-		background-color: var(--color-primary);
-		border: 1px solid var(--color-secondary);
-		border-radius: 8px;
-		transition: transform 0.2s ease;
-	}
-
-	.card:hover {
-		transform: translateY(-5px);
-		border-color: var(--color-accent);
-	}
-
-	.card h2 {
-		margin: 0;
-		font-size: 1.5rem;
-		border-bottom: 1px solid var(--color-secondary);
-		padding-bottom: 0.5rem;
-		margin-bottom: 1rem;
+	@media (max-width: 1100px) {
+		.dashboard-grid { grid-template-columns: 1fr; }
+		.welcome-card, .stats-row { grid-column: span 1; }
 	}
 </style>
