@@ -52,7 +52,50 @@ insert into projects (title, category, progress) values
 ('Whiskey Inventory', 'Logistics', 100),
 ('Annual Gala 2026', 'Events', 20);
 
-insert into activities (description, icon) values 
-('New member James B. approved', '👤'),
-('Vault security v1.2 deployed', '⚙️'),
-('Gala planning Phase 1 complete', '📅');
+-- 8. Maak de 'profiles' tabel aan
+create table profiles (
+  id uuid references auth.users on delete cascade primary key,
+  updated_at timestamp with time zone,
+  username text unique,
+  avatar_url text,
+  full_name text,
+
+  constraint username_length check (char_length(username) >= 3)
+);
+
+-- Zet RLS aan voor profiles
+alter table profiles enable row level security;
+
+create policy "Public profiles are viewable by everyone." on profiles
+  for select using (true);
+
+create policy "Users can insert their own profile." on profiles
+  for insert with check (auth.uid() = id);
+
+create policy "Users can update own profile." on profiles
+  for update using (auth.uid() = id);
+
+-- 9. Trigger voor automatische profiel aanmaak bij nieuwe user
+create function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, full_name, avatar_url)
+  values (new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- 10. Storage setup (moet handmatig in dashboard of via API, maar hier zijn de policies)
+-- Maak handmatig een bucket genaamd 'avatars' aan in Supabase Storage en zet deze op 'Public'
+-- Of gebruik deze policies als de bucket al bestaat:
+/*
+create policy "Avatar images are publicly accessible." on storage.objects
+  for select using (bucket_id = 'avatars');
+
+create policy "Anyone can upload an avatar." on storage.objects
+  for insert with check (bucket_id = 'avatars' AND auth.uid() = owner);
+*/

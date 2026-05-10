@@ -1,0 +1,175 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<script>
+	import { supabase } from '../lib/supabase';
+
+	let userId = '';
+
+	// Auth protection & load profile handled by AppLayout for shell
+	// But we need the ID here for the form
+	supabase.auth.getSession().then(async ({ data: { session } }) => {
+		if (session) {
+			userId = session.user.id;
+			loadProfile(userId);
+		}
+	});
+
+	async function loadProfile(id: string) {
+		const { data, error } = await supabase
+			.from('profiles')
+			.select('username, full_name, avatar_url')
+			.eq('id', id)
+			.single();
+
+		if (data) {
+			(document.getElementById('username') as HTMLInputElement).value = data.username || '';
+			(document.getElementById('full_name') as HTMLInputElement).value = data.full_name || '';
+			if (data.avatar_url) {
+				(document.getElementById('avatar-preview') as HTMLImageElement).src = data.avatar_url;
+			}
+		}
+	}
+
+	// Update Profile
+	const profileForm = document.getElementById('profile-form');
+	profileForm?.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		const formData = new FormData(profileForm as HTMLFormElement);
+		const updates = {
+			id: userId,
+			username: formData.get('username'),
+			full_name: formData.get('full_name'),
+			updated_at: new Date(),
+		};
+
+		const { error } = await supabase.from('profiles').upsert(updates);
+		if (error) alert(error.message);
+		else {
+			alert('Profile updated!');
+			window.location.reload(); // Refresh to update sidebar
+		}
+	});
+
+	// Change Password
+	const passwordForm = document.getElementById('password-form');
+	passwordForm?.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		const formData = new FormData(passwordForm as HTMLFormElement);
+		const newPassword = formData.get('new_password') as string;
+
+		const { error } = await supabase.auth.updateUser({ password: newPassword });
+		if (error) alert(error.message);
+		else alert('Password changed!');
+	});
+
+	// Avatar Upload
+	const avatarInput = document.getElementById('avatar-upload') as HTMLInputElement;
+	avatarInput?.addEventListener('change', async (e) => {
+		const file = avatarInput.files?.[0];
+		if (!file) return;
+
+		const fileExt = file.name.split('.').pop();
+		const fileName = `${userId}-${Math.random()}.${fileExt}`;
+		const filePath = `public/${fileName}`;
+
+		const { error: uploadError } = await supabase.storage
+			.from('avatars')
+			.upload(filePath, file);
+
+		if (uploadError) {
+			alert(uploadError.message);
+			return;
+		}
+
+		const { data: { publicUrl } } = supabase.storage
+			.from('avatars')
+			.getPublicUrl(filePath);
+
+		const { error: updateError } = await supabase.from('profiles').upsert({
+			id: userId,
+			avatar_url: publicUrl,
+		});
+
+		if (updateError) alert(updateError.message);
+		else {
+			(document.getElementById('avatar-preview') as HTMLImageElement).src = publicUrl;
+			alert('Avatar updated!');
+			window.location.reload(); // Refresh to update sidebar
+		}
+	});
+</script>
+
+<AppLayout title="Account Settings | Gentlemen's Dashboard">
+	<header class="account-header">
+		<h1 class="serif">Account <span class="gold-text italic">Settings</span></h1>
+		<p class="subtitle">Manage your personal profile and security preferences.</p>
+	</header>
+
+	<div class="account-grid">
+		<!-- Profile Section -->
+		<section class="card settings-section">
+			<h2 class="serif">Public Profile</h2>
+			<div class="avatar-edit">
+				<img id="avatar-preview" src="https://ui-avatars.com/api/?name=User&background=1c1917&color=c5a059" alt="Avatar" />
+				<div class="avatar-actions">
+					<label for="avatar-upload" class="btn-secondary">Upload New Photo</label>
+					<input type="file" id="avatar-upload" accept="image/*" hidden />
+					<p class="hint">JPG or PNG. Max 1MB.</p>
+				</div>
+			</div>
+
+			<form id="profile-form">
+				<div class="form-group">
+					<label for="username">Username</label>
+					<input type="text" id="username" name="username" placeholder="gentleman_007" />
+				</div>
+				<div class="form-group">
+					<label for="full_name">Full Name</label>
+					<input type="text" id="full_name" name="full_name" placeholder="Stan F.V." />
+				</div>
+				<button type="submit" class="btn-primary">Save Changes</button>
+			</form>
+		</section>
+
+		<!-- Security Section -->
+		<section class="card settings-section">
+			<h2 class="serif">Security</h2>
+			<form id="password-form">
+				<div class="form-group">
+					<label for="new_password">New Password</label>
+					<input type="password" id="new_password" name="new_password" required />
+				</div>
+				<button type="submit" class="btn-secondary">Update Password</button>
+			</form>
+		</section>
+	</div>
+</AppLayout>
+
+<style>
+	.account-header { margin-bottom: 3rem; }
+	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
+	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
+
+	.account-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem; align-items: start; }
+	
+	.settings-section { padding: 2.5rem; }
+	.settings-section h2 { font-size: 1.8rem; margin-bottom: 2rem; }
+
+	.avatar-edit { display: flex; align-items: center; gap: 2rem; margin-bottom: 2.5rem; }
+	#avatar-preview { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-primary); }
+	.avatar-actions .hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 0.5rem; }
+
+	.form-group { margin-bottom: 1.5rem; }
+	label { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); margin-bottom: 0.5rem; }
+	input { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text); padding: 0.8rem 1rem; border-radius: 8px; outline: none; }
+	input:focus { border-color: var(--color-primary); }
+
+	.gold-text { color: var(--color-primary); }
+	.italic { font-style: italic; }
+
+	@media (max-width: 1000px) {
+		.account-grid { grid-template-columns: 1fr; }
+	}
+</style>
