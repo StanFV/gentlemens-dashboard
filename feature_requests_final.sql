@@ -1,5 +1,5 @@
--- GENTLEMEN'S DASHBOARD - FEATURE REQUESTS SETUP
--- Dit script configureert de tabel voor feature requests met bewerk- en toewijzingsrechten.
+-- GENTLEMEN'S DASHBOARD - FEATURE REQUESTS SETUP (FINAL VERSION)
+-- Dit script configureert de tabel voor feature requests met volledige beheerfunctionaliteit.
 
 -- 1. Tabel aanmaken of bijwerken
 CREATE TABLE IF NOT EXISTS public.feature_requests (
@@ -7,42 +7,41 @@ CREATE TABLE IF NOT EXISTS public.feature_requests (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in-progress', 'completed', 'planned')),
+    status TEXT DEFAULT 'planned' CHECK (status IN ('planned', 'in-progress', 'completed')),
     priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     assigned_to UUID REFERENCES public.profiles(id) ON DELETE SET NULL
 );
 
--- 2. Verwijder de upvotes kolom indien deze nog bestaat van een vorige versie
-ALTER TABLE public.feature_requests DROP COLUMN IF EXISTS upvotes;
+-- 2. Update bestaande 'pending' records naar 'planned'
+UPDATE public.feature_requests SET status = 'planned' WHERE status = 'pending';
 
--- 3. Zorg voor een harde Foreign Key relatie voor de join met profiles
+-- 2. Foreign Key relatie optimaliseren
 ALTER TABLE public.feature_requests 
   DROP CONSTRAINT IF EXISTS feature_requests_assigned_to_fkey,
   ADD CONSTRAINT feature_requests_assigned_to_fkey 
-  FOREIGN KEY (assigned_to) REFERENCES public.profiles(id);
+  FOREIGN KEY (assigned_to) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
--- 4. Meta-informatie voor Supabase API relatie-detectie
-COMMENT ON COLUMN public.feature_requests.assigned_to IS '{"foreignKey": "public.profiles.id"}';
-
--- 5. Beveiliging (Row Level Security) inschakelen
+-- 3. Row Level Security (RLS) configureren
 ALTER TABLE public.feature_requests ENABLE ROW LEVEL SECURITY;
 
--- 6. Policies voor toegang en beheer
--- Iedereen kan de lijst zien
+-- 4. Policies voor beheer (Select, Insert, Update, Delete)
 DROP POLICY IF EXISTS "Feature requests are viewable by everyone" ON public.feature_requests;
 CREATE POLICY "Feature requests are viewable by everyone" 
 ON public.feature_requests FOR SELECT 
 USING (true);
 
--- Elke ingelogde gebruiker kan een nieuwe suggestie doen
 DROP POLICY IF EXISTS "Users can insert their own feature requests" ON public.feature_requests;
 CREATE POLICY "Users can insert their own feature requests" 
 ON public.feature_requests FOR INSERT 
 WITH CHECK (auth.role() = 'authenticated');
 
--- Elke ingelogde gebruiker mag bewerken (om status aan te passen of iemand toe te wijzen)
 DROP POLICY IF EXISTS "Users can update feature requests" ON public.feature_requests;
 CREATE POLICY "Users can update feature requests" 
 ON public.feature_requests FOR UPDATE 
+USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Users can delete feature requests" ON public.feature_requests;
+CREATE POLICY "Users can delete feature requests" 
+ON public.feature_requests FOR DELETE 
 USING (auth.role() = 'authenticated');

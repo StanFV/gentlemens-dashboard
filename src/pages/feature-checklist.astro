@@ -2,68 +2,72 @@
 import AppLayout from '../layouts/AppLayout.astro';
 ---
 
-<AppLayout title="Feature Checklist">
-	<div class="features-view">
-		<div class="page-header">
-			<div class="header-content">
-				<h1 class="serif">Feature Checklist</h1>
-				<p class="subtitle">Beheer dashboard feature requests en toewijzingen.</p>
-			</div>
-			<button id="open-modal-btn" class="btn-primary">Nieuwe Request</button>
+<AppLayout title="Feature Checklist | Gentlemen's Dashboard">
+	<header class="page-header">
+		<div>
+			<h1 class="serif">Feature <span class="gold-text italic">Checklist</span></h1>
+			<p class="subtitle">Suggest, manage, and track upcoming dashboard refinements.</p>
 		</div>
+		<button id="open-modal-btn" class="btn-primary">+ Create New Request</button>
+	</header>
 
-		<div class="list-filters card">
-			<div class="filter-group">
-				<button class="filter-btn active" data-status="all">Alles</button>
-				<button class="filter-btn" data-status="pending">Pending</button>
-				<button class="filter-btn" data-status="planned">Planned</button>
-				<button class="filter-btn" data-status="in-progress">In Progress</button>
-				<button class="filter-btn" data-status="completed">Completed</button>
-			</div>
+	<div class="list-filters card">
+		<div class="filter-group">
+			<button class="filter-btn active" data-status="all">All</button>
+			<button class="filter-btn" data-status="pending">Pending</button>
+			<button class="filter-btn" data-status="planned">Planned</button>
+			<button class="filter-btn" data-status="in-progress">In Progress</button>
+			<button class="filter-btn" data-status="completed">Completed</button>
 		</div>
-		
-		<div id="features-loading" class="loading">Gegevens laden...</div>
-		<div id="features-empty" class="empty-state" style="display: none;">Geen feature requests gevonden.</div>
-		<div id="features-grid" class="features-grid"></div>
 	</div>
 
-	<!-- Modal for Adding/Editing -->
-	<div id="feature-modal" class="modal">
-		<div class="modal-content card">
-			<div class="modal-header">
-				<h3 id="modal-title">Nieuwe Request</h3>
-				<button id="close-modal-btn" class="close-btn">&times;</button>
-			</div>
+	<div class="list-wrapper card">
+		<div class="list-header">
+			<div class="col-status">Status</div>
+			<div class="col-title">Feature Request</div>
+			<div class="col-assignee">Assigned To</div>
+			<div class="col-date">Date</div>
+			<div class="col-actions"></div>
+		</div>
+		<div id="features-container" class="list-items">
+			<div class="loading-state">Loading the request vault...</div>
+		</div>
+	</div>
+
+	<!-- Modal -->
+	<div id="feature-modal" class="modal-overlay">
+		<div class="modal-card card">
+			<h2 id="modal-title" class="serif">New <span class="gold-text">Request</span></h2>
 			<form id="feature-form">
 				<input type="hidden" id="feature-id" name="id" />
 				<div class="form-group">
-					<label for="title">Titel</label>
-					<input type="text" id="title" name="title" placeholder="Wat moet er toegevoegd worden?" required />
+					<label for="title">Feature Title *</label>
+					<input type="text" id="title" name="title" required placeholder="A brief, descriptive title" />
 				</div>
 				<div class="form-group">
-					<label for="description">Beschrijving</label>
-					<textarea id="description" name="description" placeholder="Beschrijf de feature..." rows="4"></textarea>
+					<label for="description">Detailed Description</label>
+					<textarea id="description" name="description" rows="4" placeholder="Elaborate on the request..."></textarea>
 				</div>
 				<div class="form-row">
 					<div class="form-group">
-						<label for="status">Status</label>
+						<label for="status">Current Status</label>
 						<select id="status" name="status">
-							<option value="pending">Pending</option>
 							<option value="planned">Planned</option>
 							<option value="in-progress">In Progress</option>
 							<option value="completed">Completed</option>
 						</select>
 					</div>
 					<div class="form-group">
-						<label for="assigned_to">Toewijzen aan</label>
+						<label for="assigned_to">Assignee</label>
 						<select id="assigned_to" name="assigned_to">
-							<option value="">Niemand</option>
+							<option value="">Unassigned</option>
 						</select>
 					</div>
 				</div>
+				
 				<div class="modal-actions">
-					<button type="button" id="cancel-btn" class="btn-secondary">Annuleren</button>
-					<button type="submit" class="btn-primary">Opslaan</button>
+					<button type="button" id="cancel-btn" class="btn-secondary">Cancel</button>
+					<button type="submit" id="submit-btn" class="btn-primary">Save Request</button>
 				</div>
 			</form>
 		</div>
@@ -72,21 +76,22 @@ import AppLayout from '../layouts/AppLayout.astro';
 	<script>
 		import { supabase } from '../lib/supabase';
 
-		const grid = document.getElementById('features-grid');
-		const loading = document.getElementById('features-loading');
-		const empty = document.getElementById('features-empty');
+		const container = document.getElementById('features-container');
 		const filterBtns = document.querySelectorAll('.filter-btn');
 		const modal = document.getElementById('feature-modal');
+		const openModalBtn = document.getElementById('open-modal-btn');
+		const cancelBtn = document.getElementById('cancel-btn');
 		const form = document.getElementById('feature-form') as HTMLFormElement;
 		const userSelect = document.getElementById('assigned_to') as HTMLSelectElement;
-		
+		const modalTitleEl = document.getElementById('modal-title');
+		const submitBtn = document.getElementById('submit-btn');
+
 		let currentStatus = 'all';
-		let allProfiles = [];
+		let cachedFeatures = [];
 
 		async function loadUsers() {
 			const { data } = await supabase.from('profiles').select('id, full_name, username');
 			if (data) {
-				allProfiles = data;
 				data.forEach(profile => {
 					const option = document.createElement('option');
 					option.value = profile.id;
@@ -97,16 +102,14 @@ import AppLayout from '../layouts/AppLayout.astro';
 		}
 
 		async function loadFeatures() {
-			loading!.style.display = 'block';
-			grid!.innerHTML = '';
-			empty!.style.display = 'none';
+			if (!container) return;
+			container.innerHTML = '<div class="loading-state">Loading the request vault...</div>';
 
 			let query = supabase
 				.from('feature_requests')
 				.select(`
 					*,
 					assignee:profiles!assigned_to (
-						id,
 						full_name,
 						username,
 						avatar_url
@@ -119,85 +122,113 @@ import AppLayout from '../layouts/AppLayout.astro';
 			}
 
 			const { data, error } = await query;
-			loading!.style.display = 'none';
 
 			if (error) {
-				console.error('Error loading features:', error);
+				container.innerHTML = `<div class="empty-state"><p>Error: ${error.message}</p></div>`;
 				return;
 			}
 
 			if (!data || data.length === 0) {
-				empty!.style.display = 'block';
+				container.innerHTML = `<div class="empty-state"><p>No requests found in this archives.</p></div>`;
 				return;
 			}
 
-			data.forEach(feature => {
-				const card = document.createElement('div');
-				card.className = 'feature-card card';
-				
-				const assignee = feature.assignee;
-				const assigneeName = assignee ? (assignee.full_name || assignee.username) : 'Niet toegewezen';
+			cachedFeatures = data;
+			renderFeatures(data);
+		}
+
+		function renderFeatures(features) {
+			container!.innerHTML = features.map(f => {
+				const assignee = f.assignee;
+				const assigneeName = assignee ? (assignee.full_name || assignee.username) : 'Unassigned';
 				const assigneeAvatar = assignee?.avatar_url || `https://ui-avatars.com/api/?name=${assigneeName}&background=1c1917&color=c5a059`;
 
-				card.innerHTML = `
-					<div class="feature-content">
-						<div class="feature-top">
-							<span class="status-badge status-${feature.status}">${feature.status}</span>
-							<button class="edit-btn" data-id="${feature.id}">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-							</button>
+				return `
+					<div class="list-item" data-id="${f.id}">
+						<div class="col-status">
+							<span class="status-badge status-${f.status}">${f.status}</span>
 						</div>
-						<h3 class="feature-title">${feature.title}</h3>
-						<p class="feature-desc">${feature.description || 'Geen beschrijving.'}</p>
-						<div class="feature-footer">
-							<div class="assignee-info">
-								<img src="${assigneeAvatar}" class="assignee-avatar-small" />
+						<div class="col-title">
+							<div class="title-group">
+								<h3 class="item-title">${f.title}</h3>
+								<p class="item-desc">${f.description || 'No description provided.'}</p>
+							</div>
+						</div>
+						<div class="col-assignee">
+							<div class="assignee-pill">
+								<img src="${assigneeAvatar}" class="assignee-avatar" />
 								<span>${assigneeName}</span>
 							</div>
-							<span class="date">${new Date(feature.created_at).toLocaleDateString()}</span>
+						</div>
+						<div class="col-date">
+							<span class="date">${new Date(f.created_at).toLocaleDateString()}</span>
+						</div>
+						<div class="col-actions">
+							<button class="btn-icon edit-btn" title="Edit">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+							</button>
+							<button class="btn-icon delete-btn" title="Delete">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H5c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+							</button>
 						</div>
 					</div>
 				`;
-				grid?.appendChild(card);
-			});
+			}).join('');
 
+			setupActionButtons();
+		}
+
+		function setupActionButtons() {
 			document.querySelectorAll('.edit-btn').forEach(btn => {
 				btn.addEventListener('click', (e) => {
-					const id = (e.currentTarget as HTMLButtonElement).dataset.id;
-					const feature = data.find(f => f.id === id);
-					if (feature) openEditModal(feature);
+					const id = (e.currentTarget as HTMLElement).closest('.list-item')?.getAttribute('data-id');
+					const feature = cachedFeatures.find(f => f.id === id);
+					if (feature) openModal(feature);
+				});
+			});
+
+			document.querySelectorAll('.delete-btn').forEach(btn => {
+				btn.addEventListener('click', async (e) => {
+					const id = (e.currentTarget as HTMLElement).closest('.list-item')?.getAttribute('data-id');
+					if (id && confirm('Are you certain you wish to purge this request?')) {
+						const { error } = await supabase.from('feature_requests').delete().eq('id', id);
+						if (error) alert(error.message);
+						else loadFeatures();
+					}
 				});
 			});
 		}
 
-		function openEditModal(feature) {
-			document.getElementById('modal-title')!.textContent = 'Request Bewerken';
-			document.getElementById('feature-id')!.setAttribute('value', feature.id);
-			(document.getElementById('title') as HTMLInputElement).value = feature.title;
-			(document.getElementById('description') as HTMLTextAreaElement).value = feature.description || '';
-			(document.getElementById('status') as HTMLSelectElement).value = feature.status;
-			(document.getElementById('assigned_to') as HTMLSelectElement).value = feature.assigned_to || '';
-			modal!.style.display = 'flex';
+		function openModal(feature = null) {
+			if (feature) {
+				modalTitleEl!.innerHTML = 'Edit <span class="gold-text">Request</span>';
+				submitBtn!.textContent = 'Update Request';
+				(document.getElementById('feature-id') as HTMLInputElement).value = feature.id;
+				(document.getElementById('title') as HTMLInputElement).value = feature.title;
+				(document.getElementById('description') as HTMLTextAreaElement).value = feature.description || '';
+				(document.getElementById('status') as HTMLSelectElement).value = feature.status;
+				(document.getElementById('assigned_to') as HTMLSelectElement).value = feature.assigned_to || '';
+			} else {
+				modalTitleEl!.innerHTML = 'New <span class="gold-text">Request</span>';
+				submitBtn!.textContent = 'Save Request';
+				form.reset();
+				(document.getElementById('feature-id') as HTMLInputElement).value = '';
+			}
+			modal?.classList.add('active');
 		}
 
-		document.getElementById('open-modal-btn')?.addEventListener('click', () => {
-			document.getElementById('modal-title')!.textContent = 'Nieuwe Request';
-			form.reset();
-			document.getElementById('feature-id')!.setAttribute('value', '');
-			modal!.style.display = 'flex';
-		});
+		function closeModal() {
+			modal?.classList.remove('active');
+		}
 
-		const closeModal = () => modal!.style.display = 'none';
-		document.getElementById('close-modal-btn')?.addEventListener('click', closeModal);
-		document.getElementById('cancel-btn')?.addEventListener('click', closeModal);
+		openModalBtn?.addEventListener('click', () => openModal());
+		cancelBtn?.addEventListener('click', closeModal);
 
 		form?.addEventListener('submit', async (e) => {
 			e.preventDefault();
 			const formData = new FormData(form);
 			const id = formData.get('id');
 			const { data: { session } } = await supabase.auth.getSession();
-
-			if (!session) return alert('Log in om dit te doen.');
 
 			const payload = {
 				title: formData.get('title'),
@@ -206,16 +237,14 @@ import AppLayout from '../layouts/AppLayout.astro';
 				assigned_to: formData.get('assigned_to') || null,
 			};
 
-			let error;
+			let result;
 			if (id) {
-				const { error: err } = await supabase.from('feature_requests').update(payload).eq('id', id);
-				error = err;
+				result = await supabase.from('feature_requests').update(payload).eq('id', id);
 			} else {
-				const { error: err } = await supabase.from('feature_requests').insert({ ...payload, user_id: session.user.id });
-				error = err;
+				result = await supabase.from('feature_requests').insert({ ...payload, user_id: session?.user.id });
 			}
 
-			if (error) alert('Fout: ' + error.message);
+			if (result.error) alert(result.error.message);
 			else {
 				closeModal();
 				loadFeatures();
@@ -236,199 +265,64 @@ import AppLayout from '../layouts/AppLayout.astro';
 	</script>
 </AppLayout>
 
-<style>
-	.features-view {
-		width: 100%;
-	}
-
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-end;
-		margin-bottom: 3rem;
-	}
-
-	.page-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+<style is:global>
+	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; }
+	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
 	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
-	.list-filters {
-		padding: 1rem;
-		margin-bottom: 2rem;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
+	.list-filters { padding: 1rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; }
 	.filter-group { display: flex; gap: 0.5rem; }
-
-	.filter-btn {
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		color: var(--color-text-muted);
-		padding: 0.5rem 1.25rem;
-		border-radius: 100px;
-		font-size: 0.85rem;
-		cursor: pointer;
-		transition: all 0.3s;
-	}
-
+	.filter-btn { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem 1.25rem; border-radius: 100px; font-size: 0.85rem; cursor: pointer; transition: all 0.3s; }
 	.filter-btn:hover { border-color: var(--color-primary); color: var(--color-text); }
 	.filter-btn.active { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
 
-	.features-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-		gap: 1.5rem;
-	}
+	.list-wrapper { overflow: hidden; }
+	.list-header { display: grid; grid-template-columns: 140px 1fr 180px 120px 100px; padding: 1.5rem 2rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
+	
+	.list-items { min-height: 200px; }
+	.list-item { display: grid; grid-template-columns: 140px 1fr 180px 120px 100px; padding: 1.5rem 2rem; border-bottom: 1px solid var(--color-border); align-items: center; transition: background 0.2s; }
+	.list-item:last-child { border-bottom: none; }
+	.list-item:hover { background: rgba(197, 160, 89, 0.03); }
 
-	.card {
-		background: var(--color-card);
-		border: 1px solid var(--color-border);
-		border-radius: 16px;
-	}
+	.col-title { padding-right: 2rem; }
+	.item-title { font-size: 1.1rem; margin-bottom: 0.25rem; color: var(--color-text); }
+	.item-desc { font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.5; }
 
-	.feature-card {
-		padding: 1.5rem;
-		display: flex;
-		flex-direction: column;
-		transition: transform 0.2s, border-color 0.2s;
-	}
+	.assignee-pill { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; font-weight: 500; }
+	.assignee-avatar { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--color-primary); }
 
-	.feature-card:hover {
-		transform: translateY(-4px);
-		border-color: var(--color-primary);
-	}
+	.date { font-size: 0.85rem; color: var(--color-text-muted); }
 
-	.feature-top {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1rem;
-	}
+	.col-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
+	.delete-btn:hover { border-color: #fecaca; color: #fecaca; }
 
-	.edit-btn {
-		background: transparent;
-		border: none;
-		color: var(--color-text-muted);
-		cursor: pointer;
-		padding: 0.5rem;
-		border-radius: 8px;
-		transition: all 0.2s;
-	}
-
-	.edit-btn:hover {
-		background: var(--color-surface);
-		color: var(--color-primary);
-	}
-
-	.feature-title { font-size: 1.25rem; margin-bottom: 0.75rem; }
-	.feature-desc { color: var(--color-text-muted); font-size: 0.95rem; line-height: 1.6; flex-grow: 1; margin-bottom: 1.5rem; }
-
-	.feature-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding-top: 1rem;
-		border-top: 1px solid var(--color-border);
-	}
-
-	.assignee-info {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		font-size: 0.85rem;
-		font-weight: 500;
-	}
-
-	.assignee-avatar-small {
-		width: 24px;
-		height: 24px;
-		border-radius: 6px;
-		border: 1px solid var(--color-primary);
-	}
-
-	.date { font-size: 0.75rem; color: var(--color-text-muted); }
-
-	.status-badge {
-		font-size: 0.65rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		font-weight: 700;
-		padding: 0.25rem 0.75rem;
-		border-radius: 100px;
-	}
-
+	.status-badge { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; padding: 0.25rem 0.75rem; border-radius: 100px; display: inline-block; }
 	.status-pending { background: #4b5563; color: white; }
 	.status-planned { background: #2563eb; color: white; }
 	.status-in-progress { background: #d97706; color: white; }
 	.status-completed { background: #059669; color: white; }
 
-	/* Modal */
-	.modal {
-		position: fixed;
-		top: 0; left: 0; width: 100%; height: 100%;
-		background: rgba(0,0,0,0.8);
-		backdrop-filter: blur(4px);
-		display: none;
-		justify-content: center;
-		align-items: center;
-		z-index: 1000;
-		padding: 1rem;
-	}
+	.loading-state, .empty-state { padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
 
-	.modal-content {
-		width: 100%;
-		max-width: 600px;
-		padding: 2rem;
-	}
-
-	.modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 2rem;
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		color: var(--color-text);
-		font-size: 1.5rem;
-		cursor: pointer;
-	}
-
-	.form-row {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1rem;
-	}
-
+	/* Modal Styling - Shared with Projects */
+	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
+	.modal-overlay.active { display: flex; }
+	.modal-card { width: 100%; max-width: 500px; padding: 3rem; }
+	
 	.form-group { margin-bottom: 1.5rem; }
-	.form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 500; }
-	.form-group input, .form-group textarea, .form-group select {
-		width: 100%;
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		padding: 0.75rem 1rem;
-		color: var(--color-text);
-		font-family: inherit;
-		outline: none;
-	}
+	.form-group label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.5rem; letter-spacing: 0.1em; font-weight: 700; }
+	.form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem 1rem; color: var(--color-text); font-family: inherit; outline: none; transition: border-color 0.2s; }
+	.form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--color-primary); }
+	
+	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
 
-	.modal-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 1rem;
-		margin-top: 1rem;
-	}
-
-	.loading, .empty-state {
-		text-align: center;
-		padding: 4rem;
-		color: var(--color-text-muted);
-		background: var(--color-card);
-		border-radius: 16px;
-		border: 1px dashed var(--color-border);
+	@media (max-width: 900px) {
+		.list-header { display: none; }
+		.list-item { grid-template-columns: 1fr; gap: 1rem; padding: 2rem; }
+		.col-actions { justify-content: flex-start; }
+		.col-status, .col-title, .col-assignee, .col-date, .col-actions { padding: 0; }
 	}
 </style>
