@@ -1,0 +1,63 @@
+---
+interface Props {
+	title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="nl">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content="Gentlemen's Dashboard" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title}</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
+	</head>
+	<body>
+		<slot />
+	</body>
+</html>
+<style is:global>
+	:root {
+		--color-primary: #3d2b1f; /* Deep Brown */
+		--color-secondary: #5c4033; /* Rich Brown */
+		--color-accent: #c5a059; /* Gold/Brass */
+		--color-bg: #1a120b; /* Very Dark Brown/Black */
+		--color-text: #eaddca; /* Cream/Bone */
+		--color-text-muted: #a89a8e;
+	}
+	
+	html {
+		font-family: 'Source Sans 3', system-ui, sans-serif;
+		background: var(--color-bg);
+		color: var(--color-text);
+	}
+
+	body {
+		margin: 0;
+		min-height: 100vh;
+	}
+
+	h1, h2, h3, h4, h5, h6 {
+		font-family: 'Playfair Display', serif;
+		color: var(--color-accent);
+	}
+
+	code {
+		font-family:
+			Menlo,
+			Monaco,
+			Lucida Console,
+			Liberation Mono,
+			DejaVu Sans Mono,
+			Bitstream Vera Sans Mono,
+			Courier New,
+			monospace;
+	}
+</style>
