@@ -17,7 +17,7 @@ const { title } = Astro.props;
 		<title>{title}</title>
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-		<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
+		<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 	</head>
 	<body>
 		<slot />
@@ -25,39 +25,44 @@ const { title } = Astro.props;
 </html>
 <style is:global>
 	:root {
-		--color-primary: #3d2b1f; /* Deep Brown */
-		--color-secondary: #5c4033; /* Rich Brown */
-		--color-accent: #c5a059; /* Gold/Brass */
-		--color-bg: #1a120b; /* Very Dark Brown/Black */
-		--color-text: #eaddca; /* Cream/Bone */
-		--color-text-muted: #a89a8e;
+		/* Palette inspired by the Dribbble sample: Dark, minimal, luxury */
+		--color-bg: #0a0908; /* Near black */
+		--color-surface: #14110f; /* Deepest brown/grey surface */
+		--color-card: #1c1917; /* Card background */
+		--color-primary: #c5a059; /* Classic Gold */
+		--color-primary-dim: rgba(197, 160, 89, 0.15);
+		--color-text: #e7e5e4; /* Warm white */
+		--color-text-muted: #a8a29e;
+		--color-border: rgba(231, 229, 228, 0.08);
+		
+		--font-serif: 'Instrument Serif', serif;
+		--font-sans: 'Inter', system-ui, sans-serif;
 	}
 	
+	* {
+		box-sizing: border-box;
+		margin: 0;
+		padding: 0;
+	}
+
 	html {
-		font-family: 'Source Sans 3', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		background: var(--color-bg);
 		color: var(--color-text);
+		-webkit-font-smoothing: antialiased;
 	}
 
 	body {
-		margin: 0;
 		min-height: 100vh;
+		overflow: hidden;
 	}
 
-	h1, h2, h3, h4, h5, h6 {
-		font-family: 'Playfair Display', serif;
-		color: var(--color-accent);
+	h1, h2, h3, .serif {
+		font-family: var(--font-serif);
+		font-weight: 400;
 	}
 
-	code {
-		font-family:
-			Menlo,
-			Monaco,
-			Lucida Console,
-			Liberation Mono,
-			DejaVu Sans Mono,
-			Bitstream Vera Sans Mono,
-			Courier New,
-			monospace;
+	button, input {
+		font-family: inherit;
 	}
 </style>
