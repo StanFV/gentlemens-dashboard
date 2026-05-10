@@ -6,18 +6,27 @@ import AppLayout from '../layouts/AppLayout.astro';
 	import { supabase } from '../lib/supabase';
 
 	let userId = '';
+	let userEmail = '';
 
-	// Auth protection & load profile handled by AppLayout for shell
-	// But we need the ID here for the form
+	// Get session info
 	supabase.auth.getSession().then(async ({ data: { session } }) => {
 		if (session) {
 			userId = session.user.id;
+			userEmail = session.user.email || '';
 			loadProfile(userId);
 		}
 	});
 
+	// Check if this is a first-time setup
+	const urlParams = new URLSearchParams(window.location.search);
+	const isSetup = urlParams.get('setup') === 'true';
+	if (isSetup) {
+		const setupNotice = document.getElementById('setup-notice');
+		if (setupNotice) setupNotice.style.display = 'block';
+	}
+
 	async function loadProfile(id: string) {
-		const { data, error } = await supabase
+		const { data } = await supabase
 			.from('profiles')
 			.select('username, full_name, avatar_url')
 			.eq('id', id)
@@ -32,36 +41,73 @@ import AppLayout from '../layouts/AppLayout.astro';
 		}
 	}
 
-	// Update Profile
+	// Update Profile Logic
 	const profileForm = document.getElementById('profile-form');
 	profileForm?.addEventListener('submit', async (e) => {
 		e.preventDefault();
 		const formData = new FormData(profileForm as HTMLFormElement);
+		const username = formData.get('username') as string;
+		
+		if (username.length < 3) {
+			alert('Username must be at least 3 characters.');
+			return;
+		}
+
 		const updates = {
 			id: userId,
-			username: formData.get('username'),
+			username: username,
 			full_name: formData.get('full_name'),
 			updated_at: new Date(),
 		};
 
 		const { error } = await supabase.from('profiles').upsert(updates);
-		if (error) alert(error.message);
-		else {
-			alert('Profile updated!');
-			window.location.reload(); // Refresh to update sidebar
+		if (error) {
+			if (error.code === '23505') alert('This username is already taken.');
+			else alert(error.message);
+		} else {
+			alert('Profile updated successfully!');
+			window.location.href = '/'; // Go back to dashboard after successful update
 		}
 	});
 
-	// Change Password
+	// Secure Password Change Logic
 	const passwordForm = document.getElementById('password-form');
 	passwordForm?.addEventListener('submit', async (e) => {
 		e.preventDefault();
 		const formData = new FormData(passwordForm as HTMLFormElement);
+		const currentPassword = formData.get('current_password') as string;
 		const newPassword = formData.get('new_password') as string;
+		const confirmPassword = formData.get('confirm_password') as string;
 
-		const { error } = await supabase.auth.updateUser({ password: newPassword });
-		if (error) alert(error.message);
-		else alert('Password changed!');
+		if (newPassword !== confirmPassword) {
+			alert('New passwords do not match.');
+			return;
+		}
+
+		if (newPassword.length < 6) {
+			alert('Password must be at least 6 characters.');
+			return;
+		}
+
+		// 1. Re-authenticate to verify current password
+		const { error: authError } = await supabase.auth.signInWithPassword({
+			email: userEmail,
+			password: currentPassword,
+		});
+
+		if (authError) {
+			alert('Current password incorrect.');
+			return;
+		}
+
+		// 2. Update to new password
+		const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+		
+		if (updateError) alert(updateError.message);
+		else {
+			alert('Password changed successfully!');
+			(passwordForm as HTMLFormElement).reset();
+		}
 	});
 
 	// Avatar Upload
@@ -95,53 +141,67 @@ import AppLayout from '../layouts/AppLayout.astro';
 		if (updateError) alert(updateError.message);
 		else {
 			(document.getElementById('avatar-preview') as HTMLImageElement).src = publicUrl;
-			alert('Avatar updated!');
-			window.location.reload(); // Refresh to update sidebar
+			// Refresh sidebars manually or reload
+			const avatarEls = document.querySelectorAll('.user-avatar-img');
+			avatarEls.forEach(el => (el as HTMLImageElement).src = publicUrl);
 		}
 	});
 </script>
 
 <AppLayout title="Account Settings | Gentlemen's Dashboard">
+	<div id="setup-notice" class="alert-box" style="display: none;">
+		<p><strong>Welcome, Gentleman.</strong> Please complete your profile by setting a username before proceeding.</p>
+	</div>
+
 	<header class="account-header">
 		<h1 class="serif">Account <span class="gold-text italic">Settings</span></h1>
-		<p class="subtitle">Manage your personal profile and security preferences.</p>
+		<p class="subtitle">Refine your identity and secure your access.</p>
 	</header>
 
 	<div class="account-grid">
 		<!-- Profile Section -->
 		<section class="card settings-section">
-			<h2 class="serif">Public Profile</h2>
+			<h2 class="serif">Public Identity</h2>
 			<div class="avatar-edit">
 				<img id="avatar-preview" src="https://ui-avatars.com/api/?name=User&background=1c1917&color=c5a059" alt="Avatar" />
 				<div class="avatar-actions">
-					<label for="avatar-upload" class="btn-secondary">Upload New Photo</label>
+					<label for="avatar-upload" class="btn-secondary">Upload Portrait</label>
 					<input type="file" id="avatar-upload" accept="image/*" hidden />
-					<p class="hint">JPG or PNG. Max 1MB.</p>
+					<p class="hint">JPG/PNG. Max 1MB.</p>
 				</div>
 			</div>
 
 			<form id="profile-form">
 				<div class="form-group">
-					<label for="username">Username</label>
-					<input type="text" id="username" name="username" placeholder="gentleman_007" />
+					<label for="username">Username (Required)</label>
+					<input type="text" id="username" name="username" placeholder="e.g. agent_bond" required />
 				</div>
 				<div class="form-group">
 					<label for="full_name">Full Name</label>
-					<input type="text" id="full_name" name="full_name" placeholder="Stan F.V." />
+					<input type="text" id="full_name" name="full_name" placeholder="e.g. James Bond" />
 				</div>
-				<button type="submit" class="btn-primary">Save Changes</button>
+				<button type="submit" class="btn-primary">Update Profile</button>
 			</form>
 		</section>
 
 		<!-- Security Section -->
 		<section class="card settings-section">
-			<h2 class="serif">Security</h2>
+			<h2 class="serif">Security Vault</h2>
 			<form id="password-form">
+				<div class="form-group">
+					<label for="current_password">Current Password</label>
+					<input type="password" id="current_password" name="current_password" required />
+				</div>
+				<div class="divider"></div>
 				<div class="form-group">
 					<label for="new_password">New Password</label>
 					<input type="password" id="new_password" name="new_password" required />
 				</div>
-				<button type="submit" class="btn-secondary">Update Password</button>
+				<div class="form-group">
+					<label for="confirm_password">Repeat New Password</label>
+					<input type="password" id="confirm_password" name="confirm_password" required />
+				</div>
+				<button type="submit" class="btn-secondary">Secure New Password</button>
 			</form>
 		</section>
 	</div>
@@ -151,6 +211,15 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.account-header { margin-bottom: 3rem; }
 	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
 	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
+
+	.alert-box {
+		background: var(--color-primary-dim);
+		border: 1px solid var(--color-primary);
+		padding: 1.5rem;
+		border-radius: 12px;
+		margin-bottom: 3rem;
+		color: var(--color-primary);
+	}
 
 	.account-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem; align-items: start; }
 	
@@ -166,6 +235,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 	input { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text); padding: 0.8rem 1rem; border-radius: 8px; outline: none; }
 	input:focus { border-color: var(--color-primary); }
 
+	.divider { height: 1px; background: var(--color-border); margin: 2rem 0; }
 	.gold-text { color: var(--color-primary); }
 	.italic { font-style: italic; }
 

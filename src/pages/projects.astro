@@ -1,0 +1,274 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<script>
+	import { supabase } from '../lib/supabase';
+
+	// State
+	let editingProjectId: string | null = null;
+
+	// UI Elements
+	const createBtn = document.getElementById('create-project-btn');
+	const projectModal = document.getElementById('project-modal');
+	const modalTitle = document.getElementById('modal-title');
+	const submitBtn = document.getElementById('submit-btn');
+	const cancelBtn = document.getElementById('cancel-btn');
+	const projectForm = document.getElementById('project-form') as HTMLFormElement;
+	const container = document.getElementById('projects-container');
+
+	// Toggle Modal
+	function openModal(editId: string | null = null) {
+		editingProjectId = editId;
+		if (editId) {
+			modalTitle!.innerHTML = 'Edit <span class="gold-text">Project</span>';
+			submitBtn!.textContent = 'Update Project';
+			loadProjectIntoForm(editId);
+		} else {
+			modalTitle!.innerHTML = 'New <span class="gold-text">Project</span>';
+			submitBtn!.textContent = 'Initiate Project';
+			projectForm.reset();
+		}
+		projectModal?.classList.add('active');
+	}
+
+	function closeModal() {
+		projectModal?.classList.remove('active');
+		editingProjectId = null;
+		projectForm.reset();
+	}
+
+	createBtn?.addEventListener('click', () => openModal());
+	cancelBtn?.addEventListener('click', closeModal);
+
+	async function loadProjectIntoForm(id: string) {
+		const { data, error } = await supabase.from('projects').select('*').eq('id', id).single();
+		if (data) {
+			(document.getElementById('title') as HTMLInputElement).value = data.title;
+			(document.getElementById('client') as HTMLInputElement).value = data.client || '';
+			(document.getElementById('start_date') as HTMLInputElement).value = data.start_date || '';
+			(document.getElementById('end_date') as HTMLInputElement).value = data.end_date || '';
+			(document.getElementById('files_url') as HTMLInputElement).value = data.files_url || '';
+		}
+	}
+
+	// Fetch and Render Projects
+	async function loadProjects() {
+		const { data: projects, error } = await supabase
+			.from('projects')
+			.select('*')
+			.order('created_at', { ascending: false });
+
+		if (!container) return;
+
+		if (error) {
+			container.innerHTML = `<div class="empty-state card"><p>Error: ${error.message}</p></div>`;
+			return;
+		}
+
+		if (!projects || projects.length === 0) {
+			container.innerHTML = `<div class="empty-state card"><p>No projects found. Time to start something grand.</p></div>`;
+			return;
+		}
+
+		container.innerHTML = projects.map(project => `
+			<div class="project-card card" data-id="${project.id}">
+				<div class="p-header">
+					<div class="p-main-info">
+						<span class="p-category">${project.category || 'General'}</span>
+						<h2 class="serif">${project.title}</h2>
+						<p class="p-client">Client: <span>${project.client || 'Internal'}</span></p>
+					</div>
+					<div class="p-actions">
+						<button class="btn-icon edit-project" title="Edit">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+						</button>
+						<button class="btn-icon delete-project" title="Delete">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H5c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+						</button>
+					</div>
+				</div>
+
+				<div class="p-dates">
+					<div class="date-item">
+						<label>Started</label>
+						<span>${project.start_date || 'TBD'}</span>
+					</div>
+					<div class="date-item">
+						<label>Deadline</label>
+						<span>${project.end_date || 'None'}</span>
+					</div>
+				</div>
+
+				<div class="p-footer">
+					${project.files_url ? `
+						<a href="${project.files_url}" target="_blank" class="btn-secondary files-link">
+							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><polyline points="14 2 14 8 20 8"/></svg>
+							Files
+						</a>
+					` : `<span class="no-files">No files</span>`}
+					<div class="p-progress-mini">
+						<div class="p-bar-mini"><div class="p-fill-mini" style="width: ${project.progress}%"></div></div>
+						<span class="p-num-mini">${project.progress}%</span>
+					</div>
+				</div>
+			</div>
+		`).join('');
+
+		// Re-attach event listeners
+		setupActionButtons();
+	}
+
+	function setupActionButtons() {
+		document.querySelectorAll('.edit-project').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				const id = (e.currentTarget as HTMLElement).closest('.project-card')?.getAttribute('data-id');
+				if (id) openModal(id);
+			});
+		});
+
+		document.querySelectorAll('.delete-project').forEach(btn => {
+			btn.addEventListener('click', async (e) => {
+				const id = (e.currentTarget as HTMLElement).closest('.project-card')?.getAttribute('data-id');
+				if (id && confirm('Are you certain you wish to remove this project? This action cannot be undone.')) {
+					const { error } = await supabase.from('projects').delete().eq('id', id);
+					if (error) alert(error.message);
+					else loadProjects();
+				}
+			});
+		});
+	}
+
+	// Form Submission (Create or Update)
+	projectForm?.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		const formData = new FormData(projectForm);
+		const { data: { session } } = await supabase.auth.getSession();
+		
+		const projectData = {
+			title: formData.get('title'),
+			client: formData.get('client'),
+			start_date: formData.get('start_date') || null,
+			end_date: formData.get('end_date') || null,
+			files_url: formData.get('files_url'),
+			user_id: session?.user.id
+		};
+
+		let result;
+		if (editingProjectId) {
+			result = await supabase.from('projects').update(projectData).eq('id', editingProjectId);
+		} else {
+			result = await supabase.from('projects').insert([projectData]);
+		}
+
+		if (result.error) alert(result.error.message);
+		else {
+			closeModal();
+			loadProjects();
+		}
+	});
+
+	// Initial load
+	loadProjects();
+</script>
+
+<AppLayout title="Projects | Gentlemen's Dashboard">
+	<header class="page-header">
+		<div>
+			<h1 class="serif">Active <span class="gold-text italic">Projects</span></h1>
+			<p class="subtitle">Manage and track all ongoing society initiatives.</p>
+		</div>
+		<button id="create-project-btn" class="btn-primary">+ Initiate New Project</button>
+	</header>
+
+	<div id="projects-container" class="projects-grid">
+		<div class="empty-state card">
+			<p>Loading the projects vault...</p>
+		</div>
+	</div>
+
+	<!-- Modal -->
+	<div id="project-modal" class="modal-overlay">
+		<div class="modal-card card">
+			<h2 id="modal-title" class="serif">New <span class="gold-text">Project</span></h2>
+			<form id="project-form">
+				<div class="form-group">
+					<label for="title">Project Name *</label>
+					<input type="text" id="title" name="title" required />
+				</div>
+				<div class="form-group">
+					<label for="client">Client / Opdrachtgever</label>
+					<input type="text" id="client" name="client" />
+				</div>
+				<div class="form-row">
+					<div class="form-group">
+						<label for="start_date">Start Date</label>
+						<input type="date" id="start_date" name="start_date" />
+					</div>
+					<div class="form-group">
+						<label for="end_date">End Date</label>
+						<input type="date" id="end_date" name="end_date" />
+					</div>
+				</div>
+				<div class="form-group">
+					<label for="files_url">Storage URL</label>
+					<input type="url" id="files_url" name="files_url" placeholder="https://..." />
+				</div>
+				
+				<div class="modal-actions">
+					<button type="button" id="cancel-btn" class="btn-secondary">Cancel</button>
+					<button type="submit" id="submit-btn" class="btn-primary">Initiate Project</button>
+				</div>
+			</form>
+		</div>
+	</div>
+</AppLayout>
+
+<style is:global>
+	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; }
+	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
+	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
+
+	.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 2rem; }
+	
+	.empty-state { grid-column: 1 / -1; padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
+
+	.project-card { padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; transition: transform 0.3s; position: relative; }
+	.project-card:hover { transform: translateY(-5px); border-color: var(--color-primary); }
+
+	.p-header { display: flex; justify-content: space-between; align-items: flex-start; }
+	.p-category { font-size: 0.7rem; text-transform: uppercase; color: var(--color-primary); letter-spacing: 0.1em; margin-bottom: 0.5rem; display: block; }
+	.p-header h2 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+	.p-client { font-size: 0.85rem; color: var(--color-text-muted); }
+	.p-client span { color: var(--color-text); font-weight: 500; }
+
+	.p-actions { display: flex; gap: 0.5rem; }
+	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
+	.delete-project:hover { border-color: #fecaca; color: #fecaca; }
+
+	.p-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem; background: var(--color-surface); border-radius: 10px; border: 1px solid var(--color-border); }
+	.date-item label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.2rem; }
+	.date-item span { font-size: 0.85rem; font-weight: 500; }
+
+	.p-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 1rem; }
+	.files-link { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.8rem; font-size: 0.75rem; text-decoration: none; color: var(--color-text); border: 1px solid var(--color-border); border-radius: 6px; }
+	.no-files { font-size: 0.75rem; color: var(--color-text-muted); font-style: italic; }
+
+	.p-progress-mini { width: 80px; display: flex; align-items: center; gap: 0.5rem; }
+	.p-bar-mini { flex-grow: 1; height: 2px; background: var(--color-border); border-radius: 100px; overflow: hidden; }
+	.p-fill-mini { height: 100%; background: var(--color-primary); }
+	.p-num-mini { font-size: 0.7rem; color: var(--color-text-muted); }
+
+	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
+	.modal-overlay.active { display: flex; }
+	.modal-card { width: 100%; max-width: 500px; padding: 3rem; }
+	
+	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+
+	@media (max-width: 600px) {
+		.page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+		.form-row { grid-template-columns: 1fr; }
+	}
+</style>
