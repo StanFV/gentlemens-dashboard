@@ -1,62 +1,55 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { supabase } from '../lib/supabase';
-
-// Fetch data from Supabase
-const { data: statsData } = await supabase.from('stats').select('*');
-const { data: projectsData } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
-const { data: activitiesData } = await supabase.from('activities').select('*').order('created_at', { ascending: false }).limit(5);
-
-// Fallback data if DB is empty or error
-const stats = statsData || [
-	{ label: 'Active Projects', value: '0', trend: '0%' },
-	{ label: 'Total Members', value: '0', trend: '0' },
-	{ label: 'Monthly Budget', value: '€0', trend: '0%' },
-];
-
-const projects = projectsData || [];
-const activities = activitiesData || [];
 ---
 
 <AppLayout title="Dashboard | Gentlemen's Dashboard">
 	<section class="hero">
 		<h1 class="serif">Good evening, <br/><span class="gold-text italic">Gentlemen.</span></h1>
-		<p class="subtitle">System operational. {projects.length} projects require your attention today.</p>
+		<p id="dashboard-subtitle" class="subtitle">System operational. Loading status...</p>
 	</section>
 
 	<div class="grid-layout">
 		<!-- Stats Section -->
-		<div class="stats-grid">
-			{stats.map(stat => (
-				<div class="stat-card">
-					<span class="stat-label">{stat.label}</span>
-					<div class="stat-main">
-						<span class="stat-value">{stat.value}</span>
-						<span class={`stat-trend ${stat.trend?.startsWith('+') ? 'up' : 'down'}`}>{stat.trend}</span>
-					</div>
+		<div id="stats-container" class="stats-grid">
+			<div class="stat-card">
+				<span class="stat-label">Active Projects</span>
+				<div class="stat-main">
+					<span class="stat-value" id="stat-projects">0</span>
 				</div>
-			))}
+			</div>
+			<div class="stat-card">
+				<span class="stat-label">Feature Requests</span>
+				<div class="stat-main">
+					<span class="stat-value" id="stat-features">0</span>
+				</div>
+			</div>
+			<div class="stat-card">
+				<span class="stat-label">System Status</span>
+				<div class="stat-main">
+					<span class="stat-value" style="font-size: 1.5rem; color: #a7f3d0;">Online</span>
+				</div>
+			</div>
 		</div>
 
 		<!-- Projects Section -->
 		<section class="card project-card">
 			<div class="card-header">
 				<h2 class="serif">Active Projects</h2>
-				<button class="text-btn">View all</button>
+				<a href="/projects" class="text-btn">View all</a>
 			</div>
-			<div class="project-items">
-				{projects.map(p => (
-					<div class="p-item">
-						<div class="p-header">
-							<span class="p-cat">{p.category}</span>
-							<h3 class="p-title">{p.title}</h3>
-						</div>
-						<div class="p-progress">
-							<div class="p-bar"><div class="p-fill" style={`width: ${p.progress}%`}></div></div>
-							<span class="p-num">{p.progress}%</span>
-						</div>
-					</div>
-				))}
+			<div id="projects-list" class="project-items">
+				<p class="empty-msg">Loading projects...</p>
+			</div>
+		</section>
+
+		<!-- Feature Checklist Section -->
+		<section class="card features-card">
+			<div class="card-header">
+				<h2 class="serif">Feature Checklist</h2>
+				<a href="/feature-checklist" class="text-btn">View all</a>
+			</div>
+			<div id="features-list" class="feature-items">
+				<p class="empty-msg">Loading requests...</p>
 			</div>
 		</section>
 
@@ -65,19 +58,97 @@ const activities = activitiesData || [];
 			<div class="card-header">
 				<h2 class="serif">Recent Log</h2>
 			</div>
-			<div class="activity-items">
-				{activities.map(activity => (
-					<div class="a-item">
-						<span class="a-time">{new Date(activity.created_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>
-						<p class="a-desc">{activity.description}</p>
-					</div>
-				))}
+			<div id="activities-list" class="activity-items">
+				<p class="empty-msg">Loading logs...</p>
 			</div>
 		</section>
 	</div>
+
+	<script>
+		import { supabase } from '../lib/supabase';
+
+		async function loadDashboard() {
+			// Fetch data
+			const [projectsRes, featuresRes, activitiesRes] = await Promise.all([
+				supabase.from('projects').select('*').order('created_at', { ascending: false }),
+				supabase.from('feature_requests').select('*').order('created_at', { ascending: false }).limit(4),
+				supabase.from('activities').select('*').order('created_at', { ascending: false }).limit(5)
+			]);
+
+			const projects = projectsRes.data || [];
+			const features = featuresRes.data || [];
+			const activities = activitiesRes.data || [];
+
+			// Update Subtitle
+			const subtitle = document.getElementById('dashboard-subtitle');
+			if (subtitle) {
+				subtitle.textContent = `System operational. ${projects.length} projects and ${features.length} feature requests require attention.`;
+			}
+
+			// Update Stats
+			document.getElementById('stat-projects')!.textContent = projects.length.toString();
+			document.getElementById('stat-features')!.textContent = features.length.toString();
+
+			// Render Projects
+			const projectsList = document.getElementById('projects-list');
+			if (projectsList) {
+				if (projects.length === 0) {
+					projectsList.innerHTML = '<p class="empty-msg">No active projects.</p>';
+				} else {
+					projectsList.innerHTML = projects.slice(0, 3).map(p => `
+						<div class="p-item">
+							<div class="p-header">
+								<span class="p-cat">${p.category || 'General'}</span>
+								<h3 class="p-title">${p.title}</h3>
+							</div>
+							<div class="p-progress">
+								<div class="p-bar"><div class="p-fill" style="width: ${p.progress}%"></div></div>
+								<span class="p-num">${p.progress}%</span>
+							</div>
+						</div>
+					`).join('');
+				}
+			}
+
+			// Render Features
+			const featuresList = document.getElementById('features-list');
+			if (featuresList) {
+				if (features.length === 0) {
+					featuresList.innerHTML = '<p class="empty-msg">No feature requests.</p>';
+				} else {
+					featuresList.innerHTML = features.map(f => `
+						<div class="f-item">
+							<div class="f-info">
+								<span class="f-status-dot status-${f.status}"></span>
+								<span class="f-title">${f.title}</span>
+							</div>
+							<span class="f-date">${new Date(f.created_at).toLocaleDateString()}</span>
+						</div>
+					`).join('');
+				}
+			}
+
+			// Render Activities
+			const activitiesList = document.getElementById('activities-list');
+			if (activitiesList) {
+				if (activities.length === 0) {
+					activitiesList.innerHTML = '<p class="empty-msg">No recent activity.</p>';
+				} else {
+					activitiesList.innerHTML = activities.map(a => `
+						<div class="a-item">
+							<span class="a-time">${new Date(a.created_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>
+							<p class="a-desc">${a.description}</p>
+						</div>
+					`).join('');
+				}
+			}
+		}
+
+		loadDashboard();
+	</script>
 </AppLayout>
 
-<style>
+<style is:global>
 	.hero { margin-bottom: 4rem; }
 	.hero h1 { font-size: 4.5rem; line-height: 0.95; margin-bottom: 1.5rem; letter-spacing: -0.03em; }
 	.gold-text { color: var(--color-primary); }
@@ -95,14 +166,11 @@ const activities = activitiesData || [];
 	.stat-label { color: var(--color-text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 1rem; }
 	.stat-main { display: flex; align-items: baseline; gap: 1rem; }
 	.stat-value { font-size: 2.5rem; font-family: var(--font-serif); }
-	.stat-trend { font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
-	.stat-trend.up { color: #a7f3d0; background: rgba(167, 243, 208, 0.1); }
-	.stat-trend.down { color: #fecaca; background: rgba(254, 202, 202, 0.1); }
 
 	.card { background: var(--color-card); border: 1px solid var(--color-border); border-radius: 24px; padding: 2rem; }
 	.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
 	.card-header h2 { font-size: 1.8rem; }
-	.text-btn { background: transparent; border: none; color: var(--color-primary); cursor: pointer; font-size: 0.9rem; }
+	.text-btn { background: transparent; border: none; color: var(--color-primary); cursor: pointer; font-size: 0.9rem; text-decoration: none; }
 
 	.project-items { display: flex; flex-direction: column; gap: 2rem; }
 	.p-header { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }
@@ -113,10 +181,24 @@ const activities = activitiesData || [];
 	.p-fill { height: 100%; background: var(--color-primary); border-radius: 100px; }
 	.p-num { font-size: 0.8rem; color: var(--color-text-muted); min-width: 35px; }
 
+	.feature-items { display: flex; flex-direction: column; gap: 1.25rem; }
+	.f-item { display: flex; justify-content: space-between; align-items: center; padding-bottom: 1rem; border-bottom: 1px solid var(--color-border); }
+	.f-item:last-child { border-bottom: none; padding-bottom: 0; }
+	.f-info { display: flex; align-items: center; gap: 1rem; }
+	.f-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+	.f-title { font-size: 0.95rem; color: var(--color-text); }
+	.f-date { font-size: 0.75rem; color: var(--color-text-muted); }
+
+	.status-planned { background: #2563eb; }
+	.status-in-progress { background: #d97706; }
+	.status-completed { background: #059669; }
+
 	.activity-items { display: flex; flex-direction: column; gap: 1.5rem; }
 	.a-item { display: flex; gap: 1.5rem; align-items: flex-start; }
 	.a-time { font-size: 0.8rem; color: var(--color-text-muted); min-width: 70px; padding-top: 0.2rem; }
 	.a-desc { font-size: 0.95rem; color: var(--color-text-muted); line-height: 1.5; }
+
+	.empty-msg { color: var(--color-text-muted); font-style: italic; font-size: 0.9rem; }
 
 	@media (max-width: 900px) {
 		.grid-layout { grid-template-columns: 1fr; }
