@@ -145,7 +145,10 @@ import AppLayout from '../layouts/AppLayout.astro';
 		<section class="card status-section">
 			<div class="section-header">
 				<h2 class="serif">Supabase Infrastructure</h2>
-				<span id="supabase-status" class="status-indicator online">Operational</span>
+				<div class="brand-badge supabase-badge">
+					<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.2536 15.1118C8.88725 15.6888 8.01955 15.5137 7.90157 14.849L7.1491 10.6083C7.1192 10.4398 6.99268 10.3045 6.82479 10.2625L2.34585 9.14272C1.65083 8.96896 1.48784 8.02691 2.08376 7.62002L6.7464 4.43632C6.88876 4.33911 6.96191 4.16781 6.92984 4.00166L6.14264 0.0818274C6.01861 -0.523032 6.83296 -0.806282 7.21175 -0.292518L14.0844 9.02844C14.4716 9.55375 14.1558 10.3113 13.5041 10.395L9.61053 10.8983C9.43128 10.9215 9.28876 11.056 9.2536 11.2334L9.2536 15.1118Z" fill="#3ECF8E"/></svg>
+					<span>Supabase</span>
+				</div>
 			</div>
 			
 			<div class="metrics-container">
@@ -180,6 +183,10 @@ import AppLayout from '../layouts/AppLayout.astro';
 				</div>
 			</div>
 
+			<div class="status-meta">
+				<span id="supabase-status" class="status-indicator online">Operational</span>
+			</div>
+
 			<div class="infra-details">
 				<div class="detail-row">
 					<span>Database Engine</span>
@@ -200,11 +207,18 @@ import AppLayout from '../layouts/AppLayout.astro';
 		<section class="card status-section">
 			<div class="section-header">
 				<h2 class="serif">Codebase Updates</h2>
-				<span class="status-indicator online">GitHub Connected</span>
+				<div class="brand-badge github-badge">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+					<span>GitHub</span>
+				</div>
 			</div>
 			
 			<div id="github-commit" class="commit-placeholder">
 				<div class="loading-state">Synchronizing with repository...</div>
+			</div>
+
+			<div class="status-meta">
+				<span class="status-indicator online">Connected</span>
 			</div>
 		</section>
 
@@ -212,8 +226,8 @@ import AppLayout from '../layouts/AppLayout.astro';
 		<section class="card status-section vercel-section">
 			<div class="section-header">
 				<h2 class="serif">Deployment Pipeline</h2>
-				<div class="vercel-badge">
-					<svg width="16" height="16" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="white"/></svg>
+				<div class="brand-badge vercel-badge">
+					<svg width="14" height="14" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="white"/></svg>
 					<span>Vercel</span>
 				</div>
 			</div>
@@ -236,8 +250,13 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; }
 	.section-header h2 { font-size: 1.8rem; }
 
-	/* Vercel Specific */
-	.vercel-badge { background: #000; color: #fff; padding: 0.4rem 0.8rem; border-radius: 4px; display: flex; align-items: center; gap: 0.6rem; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--color-border); }
+	/* Brand Badges */
+	.brand-badge { padding: 0.4rem 0.8rem; border-radius: 4px; display: flex; align-items: center; gap: 0.6rem; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--color-border); }
+	.supabase-badge { background: rgba(62, 207, 142, 0.1); color: #3ECF8E; border-color: rgba(62, 207, 142, 0.2); }
+	.github-badge { background: #24292f; color: #fff; border-color: #30363d; }
+	.vercel-badge { background: #000; color: #fff; border-color: #333; }
+
+	.status-meta { margin-bottom: 2rem; display: flex; justify-content: flex-start; }
 	
 	.deployment-current { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
 	.deploy-main { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
