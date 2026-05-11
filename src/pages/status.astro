@@ -28,7 +28,7 @@ if (VERCEL_TOKEN && PROJECT_ID) {
 }
 ---
 
-<script define:vars={{ initialDeployments: deployments, fetchError: error }}>
+<script>
 	// GitHub Status Fetching
 	async function fetchGitHubStatus() {
 		const commitEl = document.getElementById('github-commit');
@@ -105,6 +105,9 @@ if (VERCEL_TOKEN && PROJECT_ID) {
 	function renderVercelStatus() {
 		const vercelEl = document.getElementById('vercel-deployments');
 		if (!vercelEl) return;
+
+		const initialDeployments = JSON.parse(vercelEl.dataset.deployments || '[]');
+		const fetchError = vercelEl.dataset.error;
 
 		if (fetchError) {
 			vercelEl.innerHTML = `<div class="error-state">Error fetching deployments: ${fetchError}</div>`;
@@ -268,12 +271,13 @@ if (VERCEL_TOKEN && PROJECT_ID) {
 				</div>
 			</div>
 			
-			<div id="vercel-deployments">
+			<div id="vercel-deployments" data-deployments={JSON.stringify(deployments)} data-error={error}>
 				<div class="loading-state">Inspecting deployment logs...</div>
 			</div>
 		</section>
 	</div>
 </AppLayout>
+
 
 <style is:global>
 	.status-header { margin-bottom: 3rem; }
