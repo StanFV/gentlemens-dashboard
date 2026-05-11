@@ -2,44 +2,10 @@
 import AppLayout from '../layouts/AppLayout.astro';
 ---
 
-<script>
-	import { supabase } from '../lib/supabase';
-
-	async function loadUsers() {
-		const userListEl = document.getElementById('user-list');
-		if (!userListEl) return;
-
-		const { data, error } = await supabase
-			.from('profiles')
-			.select('username, full_name, avatar_url')
-			.order('username', { ascending: true });
-
-		if (error) {
-			console.error('Error fetching users:', error);
-			userListEl.innerHTML = '<div class="error">Failed to fetch users.</div>';
-			return;
-		}
-
-		if (data) {
-			userListEl.innerHTML = data.map(user => `
-				<div class="user-list-item">
-					<img src="${user.avatar_url || `https://ui-avatars.com/api/?name=${user.username || 'User'}&background=1c1917&color=c5a059`}" class="user-list-avatar" />
-					<div class="user-list-info">
-						<p class="user-list-name">${user.full_name || 'Anonymous Gentleman'}</p>
-						<p class="user-list-username">@${user.username || 'unknown'}</p>
-					</div>
-				</div>
-			`).join('');
-		}
-	}
-
-	loadUsers();
-</script>
-
 <AppLayout title="Settings | Gentlemen's Dashboard">
 	<header class="settings-header">
 		<h1 class="serif">Dashboard <span class="gold-text italic">Settings</span></h1>
-		<p class="subtitle">System configurations and member directory.</p>
+		<p class="subtitle">System configurations.</p>
 	</header>
 
 	<div class="settings-grid">
@@ -65,14 +31,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="external-icon"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
 					</div>
 				</div>
-			</div>
-		</section>
-
-		<!-- Users Section -->
-		<section class="card settings-section">
-			<h2 class="serif">Registered Members</h2>
-			<div id="user-list" class="user-list">
-				<div class="loading-state">Fetching member records...</div>
 			</div>
 		</section>
 	</div>
@@ -103,46 +61,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.url-display a { color: var(--color-primary); text-decoration: none; font-family: monospace; font-size: 0.9rem; }
 	.url-display a:hover { text-decoration: underline; }
 	.external-icon { color: var(--color-text-muted); }
-
-	/* Member List Styles - Global because of dynamic injection */
-	.user-list {
-		display: flex;
-		flex-direction: column;
-		border-top: 1px solid var(--color-border);
-	}
-
-	.user-list-item {
-		padding: 1rem 0;
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		border-bottom: 1px solid var(--color-border);
-		transition: all 0.2s;
-	}
-	.user-list-item:last-child { border-bottom: none; }
-	.user-list-item:hover .user-list-name { color: var(--color-primary); }
-
-	.user-list-avatar {
-		width: 32px !important;
-		height: 32px !important;
-		min-width: 32px;
-		border-radius: 4px;
-		border: 1px solid var(--color-border);
-		object-fit: cover;
-	}
-
-	.user-list-info {
-		display: flex;
-		flex-direction: row;
-		align-items: baseline;
-		gap: 0.75rem;
-		flex-grow: 1;
-	}
-
-	.user-list-name { font-size: 0.9rem; font-weight: 500; color: var(--color-text); transition: color 0.2s; }
-	.user-list-username { font-size: 0.8rem; color: var(--color-text-muted); font-family: monospace; }
-
-	.loading-state { padding: 2rem; text-align: center; color: var(--color-text-muted); font-style: italic; font-size: 0.85rem; }
 	
 	.gold-text { color: var(--color-primary); }
 	.italic { font-style: italic; }
