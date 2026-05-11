@@ -227,7 +227,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 		form?.addEventListener('submit', async (e) => {
 			e.preventDefault();
 			const formData = new FormData(form);
-			const id = formData.get('id');
+			const id = formData.get('id') as string;
 			const { data: { session } } = await supabase.auth.getSession();
 
 			const payload = {
@@ -238,10 +238,43 @@ import AppLayout from '../layouts/AppLayout.astro';
 			};
 
 			let result;
+			let oldFeature = id ? cachedFeatures.find(f => f.id === id) : null;
+
 			if (id) {
 				result = await supabase.from('feature_requests').update(payload).eq('id', id);
+				
+				if (!result.error && oldFeature && oldFeature.status !== payload.status) {
+					// Notify status change
+					await supabase.from('notifications').insert({
+						user_id: session?.user.id,
+						type: 'feature_status_changed',
+						title: 'Feature Status Updated',
+						content: `Status of "${payload.title}" changed from ${oldFeature.status} to ${payload.status}`,
+						link: '/feature-checklist'
+					});
+				} else if (!result.error) {
+					// General update notification (optional, maybe only for major changes)
+					await supabase.from('notifications').insert({
+						user_id: session?.user.id,
+						type: 'feature_updated',
+						title: 'Feature Request Updated',
+						content: `"${payload.title}" was updated.`,
+						link: '/feature-checklist'
+					});
+				}
 			} else {
 				result = await supabase.from('feature_requests').insert({ ...payload, user_id: session?.user.id });
+				
+				if (!result.error) {
+					// Notify new feature
+					await supabase.from('notifications').insert({
+						user_id: session?.user.id,
+						type: 'feature_added',
+						title: 'New Feature Requested',
+						content: `A new feature "${payload.title}" has been proposed.`,
+						link: '/feature-checklist'
+					});
+				}
 			}
 
 			if (result.error) alert(result.error.message);
