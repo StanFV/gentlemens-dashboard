@@ -157,8 +157,28 @@ import AppLayout from '../layouts/AppLayout.astro';
 		let result;
 		if (editingProjectId) {
 			result = await supabase.from('projects').update(projectData).eq('id', editingProjectId);
+			
+			if (!result.error) {
+				await supabase.from('notifications').insert({
+					user_id: session?.user.id,
+					type: 'project_updated',
+					title: 'Project Updated',
+					content: `Project "${projectData.title}" was updated.`,
+					link: '/projects'
+				});
+			}
 		} else {
 			result = await supabase.from('projects').insert([projectData]);
+			
+			if (!result.error) {
+				await supabase.from('notifications').insert({
+					user_id: session?.user.id,
+					type: 'project_created',
+					title: 'New Project Initiated',
+					content: `A new project "${projectData.title}" has been started.`,
+					link: '/projects'
+				});
+			}
 		}
 
 		if (result.error) alert(result.error.message);
