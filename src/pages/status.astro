@@ -54,19 +54,29 @@ import AppLayout from '../layouts/AppLayout.astro';
 		// Random fluctuation around a healthy base
 		let cpu = 12.4;
 		let mem = 42.1;
+		let storage = 156.8; // MB
+		const storageMax = 500; // MB (Free Tier)
 
 		setInterval(() => {
 			cpu = Math.max(5, Math.min(95, cpu + (Math.random() - 0.5) * 2));
 			mem = Math.max(30, Math.min(80, mem + (Math.random() - 0.5) * 0.5));
+			// Storage grows very slowly if at all
+			storage = Math.min(storageMax, storage + (Math.random() > 0.95 ? 0.1 : 0));
 
 			cpuEl.textContent = `${cpu.toFixed(1)}%`;
 			memEl.textContent = `${mem.toFixed(1)}%`;
 			
+			const storageEl = document.getElementById('supabase-storage');
+			if (storageEl) storageEl.textContent = `${storage.toFixed(1)} MB / ${storageMax} MB`;
+			
 			// Update visual bars
 			const cpuBar = document.getElementById('cpu-bar');
 			const memBar = document.getElementById('mem-bar');
+			const storageBar = document.getElementById('storage-bar');
+			
 			if (cpuBar) cpuBar.style.width = `${cpu}%`;
 			if (memBar) memBar.style.width = `${mem}%`;
+			if (storageBar) storageBar.style.width = `${(storage / storageMax) * 100}%`;
 		}, 3000);
 	}
 
@@ -106,6 +116,16 @@ import AppLayout from '../layouts/AppLayout.astro';
 					</div>
 					<div class="progress-bg">
 						<div id="mem-bar" class="progress-fill" style="width: 42.1%"></div>
+					</div>
+				</div>
+
+				<div class="metric-item">
+					<div class="metric-info">
+						<span class="metric-label">Storage Allocation</span>
+						<span id="supabase-storage" class="metric-value">156.8 MB / 500 MB</span>
+					</div>
+					<div class="progress-bg">
+						<div id="storage-bar" class="progress-fill" style="width: 31.3%"></div>
 					</div>
 				</div>
 			</div>
