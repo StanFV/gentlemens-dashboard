@@ -80,8 +80,58 @@ import AppLayout from '../layouts/AppLayout.astro';
 		}, 3000);
 	}
 
+	// Vercel Deployment Simulation
+	function simulateVercelStatus() {
+		const vercelEl = document.getElementById('vercel-deployments');
+		if (!vercelEl) return;
+
+		// Realistic static history
+		const history = [
+			{ id: 'dep_1', version: 'v1.4.2', status: 'Ready', time: '2h ago', branch: 'main' },
+			{ id: 'dep_2', version: 'v1.4.1', status: 'Ready', time: '5h ago', branch: 'main' },
+			{ id: 'dep_3', version: 'v1.4.0', status: 'Ready', time: '1d ago', branch: 'main' }
+		];
+
+		vercelEl.innerHTML = `
+			<div class="deployment-current">
+				<div class="deploy-main">
+					<div class="deploy-info">
+						<p class="deploy-label">Latest Production Build</p>
+						<p class="deploy-version">Production (v1.4.2)</p>
+					</div>
+					<span class="status-indicator online">Ready</span>
+				</div>
+				<div class="deploy-details">
+					<div class="detail-pill">
+						<span class="pill-label">Build Time</span>
+						<span class="pill-value">42s</span>
+					</div>
+					<div class="detail-pill">
+						<span class="pill-label">Environment</span>
+						<span class="pill-value">Production</span>
+					</div>
+				</div>
+			</div>
+			
+			<div class="deployment-history">
+				<p class="history-title">Recent Deployments</p>
+				${history.map(dep => `
+					<div class="history-item">
+						<div class="history-left">
+							<div class="status-dot"></div>
+							<span class="history-version">${dep.version}</span>
+							<span class="history-branch badge-dim">${dep.branch}</span>
+						</div>
+						<span class="history-time">${dep.time}</span>
+					</div>
+				`).join('')}
+			</div>
+		`;
+	}
+
 	fetchGitHubStatus();
 	simulateSupabaseMetrics();
+	simulateVercelStatus();
 </script>
 
 <AppLayout title="System Status | Gentlemen's Dashboard">
@@ -157,6 +207,21 @@ import AppLayout from '../layouts/AppLayout.astro';
 				<div class="loading-state">Synchronizing with repository...</div>
 			</div>
 		</section>
+
+		<!-- Vercel Section -->
+		<section class="card status-section vercel-section">
+			<div class="section-header">
+				<h2 class="serif">Deployment Pipeline</h2>
+				<div class="vercel-badge">
+					<svg width="16" height="16" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="white"/></svg>
+					<span>Vercel</span>
+				</div>
+			</div>
+			
+			<div id="vercel-deployments">
+				<div class="loading-state">Inspecting deployment logs...</div>
+			</div>
+		</section>
 	</div>
 </AppLayout>
 
@@ -165,11 +230,40 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.status-header h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
 	.status-header .subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
-	.status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
+	.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; align-items: start; }
 	
 	.status-section { padding: 2.5rem; }
 	.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; }
 	.section-header h2 { font-size: 1.8rem; }
+
+	/* Vercel Specific */
+	.vercel-badge { background: #000; color: #fff; padding: 0.4rem 0.8rem; border-radius: 4px; display: flex; align-items: center; gap: 0.6rem; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--color-border); }
+	
+	.deployment-current { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
+	.deploy-main { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
+	.deploy-label { font-size: 0.7rem; text-transform: uppercase; color: var(--color-text-muted); letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+	.deploy-version { font-size: 1.1rem; font-weight: 600; color: var(--color-primary); }
+	
+	.deploy-details { display: flex; gap: 1rem; }
+	.detail-pill { background: var(--color-card); border: 1px solid var(--color-border); padding: 0.5rem 1rem; border-radius: 8px; display: flex; flex-direction: column; gap: 0.2rem; }
+	.pill-label { font-size: 0.6rem; text-transform: uppercase; color: var(--color-text-muted); }
+	.pill-value { font-size: 0.85rem; font-weight: 600; }
+
+	.deployment-history { display: flex; flex-direction: column; gap: 1rem; }
+	.history-title { font-size: 0.8rem; text-transform: uppercase; color: var(--color-text-muted); letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+	.history-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--color-border); }
+	.history-item:last-child { border-bottom: none; }
+	
+	.history-left { display: flex; align-items: center; gap: 1rem; }
+	.status-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; }
+	.history-version { font-size: 0.9rem; font-weight: 500; }
+	.history-branch { font-size: 0.7rem; }
+	.history-time { font-size: 0.8rem; color: var(--color-text-muted); }
+
+	@keyframes slideUp {
+		from { opacity: 0; transform: translateY(10px); }
+		to { opacity: 1; transform: translateY(0); }
+	}
 
 	/* Metrics */
 	.metrics-container { display: flex; flex-direction: column; gap: 2rem; margin-bottom: 2.5rem; }
