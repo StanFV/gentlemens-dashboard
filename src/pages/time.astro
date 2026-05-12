@@ -1,0 +1,703 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Time Tracking | Gentlemen's Dashboard">
+
+	<!-- Active timer banner -->
+	<div id="active-banner" class="active-banner" style="display:none;">
+		<span class="banner-dot"></span>
+		<span>Recording — <strong id="banner-project">...</strong></span>
+		<span id="banner-time" class="banner-elapsed">00:00:00</span>
+		<button id="banner-stop" class="banner-stop-btn">Stop</button>
+	</div>
+
+	<header class="page-header">
+		<div>
+			<h1 class="serif">Time <span class="gold-text italic">Tracking</span></h1>
+			<p class="subtitle">Log hours and track work across all society projects.</p>
+		</div>
+	</header>
+
+	<div class="top-layout">
+
+		<!-- Log hours card -->
+		<section class="card log-card">
+			<h2 class="serif">Log Hours</h2>
+
+			<div class="form-group">
+				<label for="project-select">Project</label>
+				<select id="project-select">
+					<option value="">Select a project...</option>
+				</select>
+			</div>
+
+			<div class="form-group">
+				<label for="entry-title">Title</label>
+				<input type="text" id="entry-title" placeholder="e.g. Frontend development, Client call" />
+			</div>
+
+			<div class="form-group">
+				<label for="entry-notes">Notes <span class="optional">(optional)</span></label>
+				<textarea id="entry-notes" rows="2" placeholder="Additional details..."></textarea>
+			</div>
+
+			<!-- Mode selector -->
+			<div class="mode-tabs">
+				<button id="tab-manual" class="mode-tab active">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+					Manual
+				</button>
+				<button id="tab-timer" class="mode-tab">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+					Timer
+				</button>
+			</div>
+
+			<!-- Manual panel -->
+			<div id="panel-manual">
+				<div class="duration-row">
+					<div class="form-group duration-field">
+						<label for="hours-input">Hours</label>
+						<input type="number" id="hours-input" min="0" max="24" value="0" />
+					</div>
+					<span class="duration-colon">:</span>
+					<div class="form-group duration-field">
+						<label for="minutes-input">Minutes</label>
+						<input type="number" id="minutes-input" min="0" max="59" step="5" value="0" />
+					</div>
+					<div class="duration-presets">
+						<button class="preset-btn" data-h="0" data-m="15">15m</button>
+						<button class="preset-btn" data-h="0" data-m="30">30m</button>
+						<button class="preset-btn" data-h="1" data-m="0">1h</button>
+						<button class="preset-btn" data-h="2" data-m="0">2h</button>
+					</div>
+				</div>
+				<button id="manual-submit" class="btn-primary full-width">Save Entry</button>
+			</div>
+
+			<!-- Timer panel -->
+			<div id="panel-timer" style="display:none;">
+				<div class="timer-wrap">
+					<div id="timer-display" class="timer-display">00:00:00</div>
+				</div>
+				<button id="timer-btn" class="btn-primary full-width timer-start-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+					Start Timer
+				</button>
+			</div>
+		</section>
+
+		<!-- Member totals card -->
+		<section class="card stats-card">
+			<h2 class="serif">Member Totals</h2>
+			<div id="stats-container">
+				<div class="loading-state">Loading...</div>
+			</div>
+		</section>
+
+	</div>
+
+	<!-- Per-project overview -->
+	<section class="overview-section">
+		<h2 class="serif section-title">Hours per <span class="gold-text italic">Project</span></h2>
+		<div id="overview-container" class="overview-grid">
+			<div class="loading-state">Loading entries...</div>
+		</div>
+	</section>
+
+</AppLayout>
+
+<script>
+	import { supabase } from '../lib/supabase';
+
+	// ── State ────────────────────────────────────────────────────────────────
+	let currentUserId = '';
+	let activeTimerEntryId: string | null = null;
+	let timerInterval: ReturnType<typeof setInterval> | null = null;
+	let timerStartTime: Date | null = null;
+	let projectsCache: any[] = [];
+
+	// ── Elements ─────────────────────────────────────────────────────────────
+	const projectSelect   = document.getElementById('project-select') as HTMLSelectElement;
+	const titleInput      = document.getElementById('entry-title') as HTMLInputElement;
+	const notesInput      = document.getElementById('entry-notes') as HTMLTextAreaElement;
+	const tabManual       = document.getElementById('tab-manual') as HTMLButtonElement;
+	const tabTimer        = document.getElementById('tab-timer') as HTMLButtonElement;
+	const panelManual     = document.getElementById('panel-manual')!;
+	const panelTimer      = document.getElementById('panel-timer')!;
+	const hoursInput      = document.getElementById('hours-input') as HTMLInputElement;
+	const minutesInput    = document.getElementById('minutes-input') as HTMLInputElement;
+	const manualSubmit    = document.getElementById('manual-submit') as HTMLButtonElement;
+	const timerDisplay    = document.getElementById('timer-display')!;
+	const timerBtn        = document.getElementById('timer-btn') as HTMLButtonElement;
+	const activeBanner    = document.getElementById('active-banner')!;
+	const bannerProject   = document.getElementById('banner-project')!;
+	const bannerTime      = document.getElementById('banner-time')!;
+	const bannerStop      = document.getElementById('banner-stop') as HTMLButtonElement;
+	const overviewEl      = document.getElementById('overview-container')!;
+	const statsEl         = document.getElementById('stats-container')!;
+
+	// ── Init ─────────────────────────────────────────────────────────────────
+	supabase.auth.getSession().then(async ({ data: { session } }) => {
+		if (!session) return;
+		currentUserId = session.user.id;
+		await loadProjects();
+		await checkActiveTimer();
+		await refreshAll();
+	});
+
+	// ── Projects ─────────────────────────────────────────────────────────────
+	async function loadProjects() {
+		const { data } = await supabase
+			.from('projects')
+			.select('id, title, client')
+			.order('title');
+		if (data) {
+			projectsCache = data;
+			projectSelect.innerHTML =
+				'<option value="">Select a project...</option>' +
+				data.map(p => `<option value="${p.id}">${p.title}${p.client ? ` — ${p.client}` : ''}</option>`).join('');
+		}
+	}
+
+	// ── Active timer check on load ────────────────────────────────────────────
+	async function checkActiveTimer() {
+		const { data } = await supabase
+			.from('time_entries')
+			.select('*')
+			.eq('user_id', currentUserId)
+			.is('ended_at', null)
+			.not('started_at', 'is', null)
+			.maybeSingle();
+
+		if (data) {
+			activeTimerEntryId = data.id;
+			timerStartTime     = new Date(data.started_at);
+			projectSelect.value = data.project_id;
+			titleInput.value    = data.title;
+			if (data.notes) notesInput.value = data.notes;
+
+			// Switch to timer tab
+			switchMode('timer');
+			startTimerTick();
+			setRunningUI(true);
+		}
+	}
+
+	// ── Mode switching ────────────────────────────────────────────────────────
+	function switchMode(mode: 'manual' | 'timer') {
+		if (mode === 'manual') {
+			tabManual.classList.add('active');
+			tabTimer.classList.remove('active');
+			panelManual.style.display = 'block';
+			panelTimer.style.display  = 'none';
+		} else {
+			tabTimer.classList.add('active');
+			tabManual.classList.remove('active');
+			panelTimer.style.display  = 'block';
+			panelManual.style.display = 'none';
+		}
+	}
+
+	tabManual.addEventListener('click', () => { if (!activeTimerEntryId) switchMode('manual'); });
+	tabTimer.addEventListener('click',  () => switchMode('timer'));
+
+	// ── Presets ───────────────────────────────────────────────────────────────
+	document.querySelectorAll('.preset-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			hoursInput.value   = (btn as HTMLElement).dataset.h!;
+			minutesInput.value = (btn as HTMLElement).dataset.m!;
+		});
+	});
+
+	// ── Manual submit ─────────────────────────────────────────────────────────
+	manualSubmit.addEventListener('click', async () => {
+		const projectId     = projectSelect.value;
+		const title         = titleInput.value.trim();
+		const hours         = Math.max(0, parseInt(hoursInput.value) || 0);
+		const minutes       = Math.max(0, Math.min(59, parseInt(minutesInput.value) || 0));
+		const totalMinutes  = hours * 60 + minutes;
+
+		if (!projectId)      { showError('Please select a project.'); return; }
+		if (!title)          { showError('Please enter a title.'); return; }
+		if (totalMinutes < 1){ showError('Duration must be at least 1 minute.'); return; }
+
+		manualSubmit.textContent = 'Saving...';
+		manualSubmit.disabled    = true;
+
+		const { error } = await supabase.from('time_entries').insert({
+			user_id: currentUserId,
+			project_id: projectId,
+			title,
+			notes: notesInput.value.trim() || null,
+			duration_minutes: totalMinutes,
+		});
+
+		manualSubmit.textContent = 'Save Entry';
+		manualSubmit.disabled    = false;
+
+		if (error) { showError(error.message); return; }
+
+		titleInput.value    = '';
+		notesInput.value    = '';
+		hoursInput.value    = '0';
+		minutesInput.value  = '0';
+		await refreshAll();
+	});
+
+	// ── Timer logic ───────────────────────────────────────────────────────────
+	timerBtn.addEventListener('click', () => activeTimerEntryId ? stopTimer() : startTimer());
+	bannerStop.addEventListener('click', () => stopTimer());
+
+	async function startTimer() {
+		const projectId = projectSelect.value;
+		const title     = titleInput.value.trim();
+
+		if (!projectId) { showError('Please select a project.'); return; }
+		if (!title)     { showError('Please enter a title.'); return; }
+
+		timerBtn.textContent = 'Starting...';
+		timerBtn.disabled    = true;
+		timerStartTime       = new Date();
+
+		const { data, error } = await supabase
+			.from('time_entries')
+			.insert({
+				user_id: currentUserId,
+				project_id: projectId,
+				title,
+				notes: notesInput.value.trim() || null,
+				started_at: timerStartTime.toISOString(),
+			})
+			.select()
+			.single();
+
+		timerBtn.disabled = false;
+
+		if (error) { showError(error.message); timerStartTime = null; return; }
+
+		activeTimerEntryId = data.id;
+		startTimerTick();
+		setRunningUI(true);
+	}
+
+	async function stopTimer() {
+		if (!activeTimerEntryId || !timerStartTime) return;
+
+		bannerStop.textContent = 'Stopping...';
+		bannerStop.disabled    = true;
+		timerBtn.disabled      = true;
+
+		const endedAt         = new Date();
+		const durationMinutes = Math.max(1, Math.round((endedAt.getTime() - timerStartTime.getTime()) / 60000));
+
+		const { error } = await supabase
+			.from('time_entries')
+			.update({ ended_at: endedAt.toISOString(), duration_minutes: durationMinutes })
+			.eq('id', activeTimerEntryId);
+
+		bannerStop.textContent = 'Stop';
+		bannerStop.disabled    = false;
+		timerBtn.disabled      = false;
+
+		if (error) { showError(error.message); return; }
+
+		if (timerInterval) clearInterval(timerInterval);
+		activeTimerEntryId = null;
+		timerStartTime     = null;
+		timerDisplay.textContent = '00:00:00';
+		titleInput.value   = '';
+		notesInput.value   = '';
+		setRunningUI(false);
+		await refreshAll();
+	}
+
+	function startTimerTick() {
+		if (timerInterval) clearInterval(timerInterval);
+		timerInterval = setInterval(() => {
+			if (!timerStartTime) return;
+			const elapsed = Math.floor((Date.now() - timerStartTime.getTime()) / 1000);
+			const h = Math.floor(elapsed / 3600);
+			const m = Math.floor((elapsed % 3600) / 60);
+			const s = elapsed % 60;
+			const fmt = `${pad(h)}:${pad(m)}:${pad(s)}`;
+			timerDisplay.textContent = fmt;
+			bannerTime.textContent   = fmt;
+		}, 1000);
+	}
+
+	function setRunningUI(running: boolean) {
+		if (running) {
+			timerBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></svg> Stop Timer`;
+			timerBtn.classList.add('running');
+			const project = projectsCache.find(p => p.id === projectSelect.value);
+			bannerProject.textContent = project?.title || '...';
+			activeBanner.style.display = 'flex';
+			tabManual.disabled = true;
+		} else {
+			timerBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg> Start Timer`;
+			timerBtn.classList.remove('running');
+			activeBanner.style.display = 'none';
+			tabManual.disabled = false;
+		}
+	}
+
+	// ── Overview & Stats ──────────────────────────────────────────────────────
+	async function refreshAll() {
+		const { data, error } = await supabase
+			.from('time_entries')
+			.select(`
+				id, title, notes, duration_minutes, created_at, user_id,
+				project:projects(id, title, client),
+				member:profiles!user_id(full_name, username, avatar_url)
+			`)
+			.not('duration_minutes', 'is', null)
+			.order('created_at', { ascending: false });
+
+		if (error) {
+			overviewEl.innerHTML = `<div class="empty-state">${error.message}</div>`;
+			return;
+		}
+
+		renderStats(data || []);
+		renderOverview(data || []);
+	}
+
+	function renderStats(entries: any[]) {
+		if (entries.length === 0) {
+			statsEl.innerHTML = '<div class="empty-state-sm">No entries yet.</div>';
+			return;
+		}
+
+		const byMember = new Map<string, { name: string; avatar: string; total: number }>();
+		for (const e of entries) {
+			const uid  = e.user_id;
+			const name = e.member?.full_name || e.member?.username || 'Unknown';
+			const avatar = e.member?.avatar_url ||
+				`https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+			if (!byMember.has(uid)) byMember.set(uid, { name, avatar, total: 0 });
+			byMember.get(uid)!.total += e.duration_minutes;
+		}
+
+		const sorted = [...byMember.values()].sort((a, b) => b.total - a.total);
+
+		statsEl.innerHTML = sorted.map(m => `
+			<div class="stat-row">
+				<img src="${m.avatar}" class="stat-avatar" />
+				<span class="stat-name">${m.name}</span>
+				<span class="stat-hours">${fmtDur(m.total)}</span>
+			</div>
+		`).join('');
+	}
+
+	function renderOverview(entries: any[]) {
+		if (entries.length === 0) {
+			overviewEl.innerHTML = '<div class="empty-state card">No hours logged yet. Start tracking your work.</div>';
+			return;
+		}
+
+		// Group by project
+		const byProject = new Map<string, { project: any; entries: any[]; total: number }>();
+		for (const e of entries) {
+			const pid = e.project?.id || 'unknown';
+			if (!byProject.has(pid)) byProject.set(pid, { project: e.project, entries: [], total: 0 });
+			byProject.get(pid)!.entries.push(e);
+			byProject.get(pid)!.total += e.duration_minutes;
+		}
+
+		overviewEl.innerHTML = [...byProject.values()].map(({ project, entries, total }) => `
+			<div class="overview-card card">
+				<div class="ov-header">
+					<div class="ov-title-group">
+						<p class="ov-client">${project?.client || 'Internal'}</p>
+						<h3 class="serif ov-title">${project?.title || 'Unknown project'}</h3>
+					</div>
+					<div class="ov-total">
+						<span class="ov-total-num">${fmtDur(total)}</span>
+						<span class="ov-total-label">total</span>
+					</div>
+				</div>
+				<div class="ov-entries">
+					<div class="ov-entries-head">
+						<span>Member</span><span>Title</span><span>Duration</span><span>Date</span><span></span>
+					</div>
+					${entries.map(e => {
+						const name   = e.member?.full_name || e.member?.username || 'Unknown';
+						const avatar = e.member?.avatar_url ||
+							`https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+						const date   = new Date(e.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: '2-digit' });
+						return `
+						<div class="ov-entry-row">
+							<div class="ov-member">
+								<img src="${avatar}" class="ov-avatar" />
+								<span>${name}</span>
+							</div>
+							<div class="ov-entry-info">
+								<span class="ov-entry-title">${e.title}</span>
+								${e.notes ? `<span class="ov-entry-notes">${e.notes}</span>` : ''}
+							</div>
+							<span class="ov-duration">${fmtDur(e.duration_minutes)}</span>
+							<span class="ov-date">${date}</span>
+							${e.user_id === currentUserId ? `
+								<button class="btn-icon delete-entry-btn" data-id="${e.id}" title="Delete">
+									<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H5c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+								</button>
+							` : '<span></span>'}
+						</div>
+						`;
+					}).join('')}
+				</div>
+			</div>
+		`).join('');
+
+		document.querySelectorAll('.delete-entry-btn').forEach(btn => {
+			btn.addEventListener('click', async e => {
+				const id = (e.currentTarget as HTMLElement).dataset.id;
+				if (id && confirm('Remove this time entry?')) {
+					await supabase.from('time_entries').delete().eq('id', id);
+					await refreshAll();
+				}
+			});
+		});
+	}
+
+	// ── Helpers ───────────────────────────────────────────────────────────────
+	function pad(n: number) { return String(n).padStart(2, '0'); }
+
+	function fmtDur(minutes: number): string {
+		const h = Math.floor(minutes / 60);
+		const m = minutes % 60;
+		if (h === 0) return `${m}m`;
+		if (m === 0) return `${h}h`;
+		return `${h}h ${m}m`;
+	}
+
+	function showError(msg: string) {
+		alert(msg);
+	}
+</script>
+
+<style is:global>
+	/* ── Page header ── */
+	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
+	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
+	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
+
+	/* ── Active timer banner ── */
+	.active-banner {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		background: rgba(197,160,89,0.08);
+		border: 1px solid var(--color-primary);
+		border-radius: 10px;
+		padding: 0.75rem 1.25rem;
+		margin-bottom: 2rem;
+		font-size: 0.9rem;
+	}
+	.banner-dot {
+		width: 8px; height: 8px; border-radius: 50%;
+		background: #ef4444;
+		box-shadow: 0 0 0 3px rgba(239,68,68,0.25);
+		animation: pulse 1.5s ease-in-out infinite;
+		flex-shrink: 0;
+	}
+	@keyframes pulse {
+		0%, 100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.25); }
+		50% { box-shadow: 0 0 0 6px rgba(239,68,68,0.1); }
+	}
+	.banner-elapsed {
+		font-family: monospace;
+		font-size: 1rem;
+		color: var(--color-primary);
+		font-weight: 600;
+		margin-left: auto;
+	}
+	.banner-stop-btn {
+		background: #ef4444; color: white; border: none;
+		padding: 0.35rem 1rem; border-radius: 6px; font-size: 0.8rem;
+		cursor: pointer; font-weight: 600;
+	}
+	.banner-stop-btn:hover { background: #dc2626; }
+
+	/* ── Top layout ── */
+	.top-layout {
+		display: grid;
+		grid-template-columns: 1fr 320px;
+		gap: 2rem;
+		margin-bottom: 3rem;
+		align-items: start;
+	}
+
+	/* ── Log card ── */
+	.log-card { padding: 2.5rem; }
+	.log-card h2 { font-size: 1.8rem; margin-bottom: 2rem; }
+
+	.form-group { margin-bottom: 1.25rem; }
+	.form-group label {
+		display: block; font-size: 0.75rem; text-transform: uppercase;
+		letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.5rem;
+	}
+	.optional { text-transform: none; letter-spacing: 0; font-style: italic; }
+	.form-group input,
+	.form-group select,
+	.form-group textarea {
+		width: 100%; background: var(--color-surface); border: 1px solid var(--color-border);
+		color: var(--color-text); padding: 0.75rem 1rem; border-radius: 8px;
+		outline: none; font-family: inherit; font-size: 0.9rem; transition: border-color 0.2s;
+		resize: vertical;
+	}
+	.form-group input:focus,
+	.form-group select:focus,
+	.form-group textarea:focus { border-color: var(--color-primary); }
+	.form-group select { cursor: pointer; }
+
+	/* ── Mode tabs ── */
+	.mode-tabs {
+		display: flex;
+		gap: 0.5rem;
+		margin-bottom: 1.5rem;
+		background: var(--color-surface);
+		padding: 0.35rem;
+		border-radius: 10px;
+		border: 1px solid var(--color-border);
+	}
+	.mode-tab {
+		flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+		padding: 0.55rem 1rem; border-radius: 7px; border: none;
+		background: transparent; color: var(--color-text-muted);
+		font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+	}
+	.mode-tab:hover { color: var(--color-text); }
+	.mode-tab.active { background: var(--color-card); color: var(--color-text); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+	.mode-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+
+	/* ── Duration row ── */
+	.duration-row {
+		display: flex;
+		align-items: flex-end;
+		gap: 0.75rem;
+		margin-bottom: 1.25rem;
+	}
+	.duration-field { margin: 0; flex: 0 0 80px; }
+	.duration-colon { font-size: 1.5rem; color: var(--color-text-muted); padding-bottom: 0.5rem; }
+	.duration-presets {
+		display: flex; gap: 0.4rem; flex-wrap: wrap; padding-bottom: 0.1rem;
+	}
+	.preset-btn {
+		padding: 0.4rem 0.7rem; font-size: 0.75rem; border-radius: 6px;
+		border: 1px solid var(--color-border); background: transparent;
+		color: var(--color-text-muted); cursor: pointer; transition: all 0.2s;
+	}
+	.preset-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+	/* ── Timer display ── */
+	.timer-wrap {
+		display: flex; justify-content: center;
+		margin: 0.5rem 0 1.5rem;
+	}
+	.timer-display {
+		font-family: monospace;
+		font-size: 3.5rem;
+		font-weight: 300;
+		color: var(--color-text);
+		letter-spacing: 0.05em;
+		transition: color 0.3s;
+	}
+
+	/* Timer running state */
+	.timer-start-btn.running {
+		background: #ef4444;
+	}
+	.timer-start-btn.running:hover { background: #dc2626; }
+
+	.full-width { width: 100%; padding: 0.85rem 1.5rem; font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
+
+	/* ── Stats card ── */
+	.stats-card { padding: 2.5rem; }
+	.stats-card h2 { font-size: 1.8rem; margin-bottom: 2rem; }
+
+	.stat-row {
+		display: flex; align-items: center; gap: 0.75rem;
+		padding: 0.75rem 0; border-bottom: 1px solid var(--color-border);
+	}
+	.stat-row:last-child { border-bottom: none; }
+	.stat-avatar { width: 30px; height: 30px; border-radius: 5px; object-fit: cover; border: 1px solid var(--color-border); }
+	.stat-name { font-size: 0.85rem; font-weight: 500; flex-grow: 1; }
+	.stat-hours { font-size: 0.85rem; font-weight: 600; color: var(--color-primary); font-family: monospace; }
+	.empty-state-sm { color: var(--color-text-muted); font-size: 0.85rem; font-style: italic; padding: 1rem 0; }
+
+	/* ── Overview section ── */
+	.overview-section { margin-top: 1rem; }
+	.section-title { font-size: 2rem; margin-bottom: 1.5rem; }
+
+	.overview-grid { display: flex; flex-direction: column; gap: 1.5rem; }
+
+	.overview-card { padding: 2rem; }
+
+	.ov-header {
+		display: flex; justify-content: space-between; align-items: flex-start;
+		margin-bottom: 1.5rem;
+	}
+	.ov-client { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-primary); margin-bottom: 0.3rem; }
+	.ov-title { font-size: 1.4rem; }
+	.ov-total { text-align: right; }
+	.ov-total-num { display: block; font-size: 1.8rem; font-weight: 700; color: var(--color-primary); font-family: monospace; }
+	.ov-total-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); }
+
+	/* Entry table */
+	.ov-entries { border-top: 1px solid var(--color-border); }
+
+	.ov-entries-head {
+		display: grid;
+		grid-template-columns: 180px 1fr 80px 100px 40px;
+		padding: 0.75rem 0;
+		font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em;
+		color: var(--color-text-muted); font-weight: 700;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.ov-entry-row {
+		display: grid;
+		grid-template-columns: 180px 1fr 80px 100px 40px;
+		align-items: center;
+		padding: 0.9rem 0;
+		border-bottom: 1px solid var(--color-border);
+		transition: background 0.15s;
+		gap: 0.5rem;
+	}
+	.ov-entry-row:last-child { border-bottom: none; }
+	.ov-entry-row:hover { background: rgba(197,160,89,0.03); }
+
+	.ov-member { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; font-weight: 500; }
+	.ov-avatar { width: 26px; height: 26px; border-radius: 4px; object-fit: cover; border: 1px solid var(--color-border); flex-shrink: 0; }
+
+	.ov-entry-info { display: flex; flex-direction: column; gap: 0.2rem; }
+	.ov-entry-title { font-size: 0.875rem; color: var(--color-text); }
+	.ov-entry-notes { font-size: 0.775rem; color: var(--color-text-muted); }
+
+	.ov-duration { font-size: 0.875rem; font-weight: 600; color: var(--color-primary); font-family: monospace; }
+	.ov-date { font-size: 0.8rem; color: var(--color-text-muted); }
+
+	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.4rem; border-radius: 5px; cursor: pointer; transition: all 0.2s; }
+	.btn-icon:hover { border-color: #fecaca; color: #fecaca; }
+
+	.empty-state { padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
+	.loading-state { padding: 3rem; text-align: center; color: var(--color-text-muted); font-style: italic; font-size: 0.85rem; }
+
+	/* ── Responsive ── */
+	@media (max-width: 1100px) {
+		.top-layout { grid-template-columns: 1fr; }
+		.stats-card { order: -1; }
+	}
+	@media (max-width: 700px) {
+		.ov-entries-head { display: none; }
+		.ov-entry-row { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 0.5rem; }
+		.ov-member { grid-column: 1; }
+		.ov-duration { grid-column: 2; text-align: right; }
+		.ov-entry-info { grid-column: 1 / -1; }
+		.ov-date { font-size: 0.75rem; }
+		.duration-row { flex-wrap: wrap; }
+	}
+</style>

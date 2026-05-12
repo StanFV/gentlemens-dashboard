@@ -9,23 +9,61 @@ import Layout from '../layouts/Layout.astro';
 				<div class="logo">G</div>
 				<h1 class="serif">Gentlemen</h1>
 			</div>
-			
-			<p class="subtitle">Enter your credentials to access the society.</p>
 
-			<form id="login-form">
-				<div class="form-group">
-					<label for="email">Email Address</label>
-					<input type="email" id="email" name="email" placeholder="e.g. james.bond@mi6.gov" required />
+			<!-- Step 1: email + password -->
+			<div id="login-step">
+				<p class="subtitle">Enter your credentials to access the society.</p>
+
+				<form id="login-form">
+					<div class="form-group">
+						<label for="email">Email Address</label>
+						<input type="email" id="email" name="email" placeholder="e.g. james.bond@mi6.gov" required />
+					</div>
+					<div class="form-group">
+						<label for="password">Password</label>
+						<input type="password" id="password" name="password" required />
+					</div>
+
+					<div id="error-message" class="error-text"></div>
+
+					<button type="submit" class="btn-primary full-width">Sign In</button>
+				</form>
+			</div>
+
+			<!-- Step 2: TOTP code (shown when MFA is required) -->
+			<div id="mfa-step" style="display: none;">
+				<div class="mfa-header">
+					<div class="mfa-icon">
+						<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+					</div>
+					<h2 class="serif mfa-title">Two-Factor Auth</h2>
 				</div>
-				<div class="form-group">
-					<label for="password">Password</label>
-					<input type="password" id="password" name="password" required />
-				</div>
-				
-				<div id="error-message" class="error-text"></div>
-				
-				<button type="submit" class="btn-primary full-width">Sign In</button>
-			</form>
+
+				<p class="subtitle">Enter the 6-digit code from your authenticator app.</p>
+
+				<form id="mfa-form">
+					<div class="form-group">
+						<label for="totp-code">Authentication Code</label>
+						<input
+							type="text"
+							id="totp-code"
+							name="totp-code"
+							placeholder="000 000"
+							maxlength="6"
+							autocomplete="one-time-code"
+							inputmode="numeric"
+							pattern="[0-9]*"
+							required
+						/>
+					</div>
+
+					<div id="mfa-error-message" class="error-text"></div>
+
+					<button type="submit" class="btn-primary full-width">Verify</button>
+				</form>
+
+				<button id="back-to-login" class="text-btn">← Back to login</button>
+			</div>
 		</div>
 	</div>
 </Layout>
@@ -33,34 +71,114 @@ import Layout from '../layouts/Layout.astro';
 <script>
 	import { supabase } from '../lib/supabase';
 
+	const loginStepEl = document.getElementById('login-step')!;
+	const mfaStepEl = document.getElementById('mfa-step')!;
 	const loginForm = document.getElementById('login-form') as HTMLFormElement;
-	const errorMessage = document.getElementById('error-message');
+	const mfaForm = document.getElementById('mfa-form') as HTMLFormElement;
+	const errorMessage = document.getElementById('error-message')!;
+	const mfaErrorMessage = document.getElementById('mfa-error-message')!;
+
+	let currentFactorId = '';
+	let currentChallengeId = '';
 
 	loginForm.addEventListener('submit', async (e) => {
 		e.preventDefault();
-		if (!errorMessage) return;
 		errorMessage.textContent = '';
 
 		const formData = new FormData(loginForm);
 		const email = formData.get('email') as string;
 		const password = formData.get('password') as string;
 
-		const { error } = await supabase.auth.signInWithPassword({
-			email,
-			password,
-		});
+		const submitBtn = loginForm.querySelector('button[type="submit"]') as HTMLButtonElement;
+		submitBtn.textContent = 'Signing in...';
+		submitBtn.disabled = true;
+
+		const { error } = await supabase.auth.signInWithPassword({ email, password });
 
 		if (error) {
 			errorMessage.textContent = error.message;
+			submitBtn.textContent = 'Sign In';
+			submitBtn.disabled = false;
+			return;
+		}
+
+		// Check if MFA verification is required
+		const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+		if (aalData.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
+			const { data: factors } = await supabase.auth.mfa.listFactors();
+			const totp = factors?.totp?.find(f => f.status === 'verified');
+
+			if (!totp) {
+				window.location.href = '/';
+				return;
+			}
+
+			currentFactorId = totp.id;
+
+			const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: currentFactorId });
+
+			if (challengeError || !challenge) {
+				errorMessage.textContent = challengeError?.message || 'Failed to start MFA challenge.';
+				submitBtn.textContent = 'Sign In';
+				submitBtn.disabled = false;
+				return;
+			}
+
+			currentChallengeId = challenge.id;
+
+			loginStepEl.style.display = 'none';
+			mfaStepEl.style.display = 'block';
+			(document.getElementById('totp-code') as HTMLInputElement).focus();
 		} else {
 			window.location.href = '/';
 		}
 	});
 
-	// Check if already logged in
-	supabase.auth.getSession().then(({ data: { session } }) => {
+	mfaForm.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		mfaErrorMessage.textContent = '';
+
+		const code = (document.getElementById('totp-code') as HTMLInputElement).value.replace(/\s/g, '');
+
+		const submitBtn = mfaForm.querySelector('button[type="submit"]') as HTMLButtonElement;
+		submitBtn.textContent = 'Verifying...';
+		submitBtn.disabled = true;
+
+		const { error } = await supabase.auth.mfa.verify({
+			factorId: currentFactorId,
+			challengeId: currentChallengeId,
+			code,
+		});
+
+		if (error) {
+			mfaErrorMessage.textContent = 'Incorrect code. Please try again.';
+			submitBtn.textContent = 'Verify';
+			submitBtn.disabled = false;
+			(document.getElementById('totp-code') as HTMLInputElement).value = '';
+			return;
+		}
+
+		window.location.href = '/';
+	});
+
+	document.getElementById('back-to-login')?.addEventListener('click', async () => {
+		await supabase.auth.signOut();
+		mfaStepEl.style.display = 'none';
+		loginStepEl.style.display = 'block';
+		(document.getElementById('totp-code') as HTMLInputElement).value = '';
+		const submitBtn = loginForm.querySelector('button[type="submit"]') as HTMLButtonElement;
+		submitBtn.textContent = 'Sign In';
+		submitBtn.disabled = false;
+	});
+
+	// Redirect if already logged in at sufficient level
+	supabase.auth.getSession().then(async ({ data: { session } }) => {
 		if (session) {
-			window.location.href = '/';
+			const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+			if (aalData.nextLevel !== 'aal2' || aalData.currentLevel === 'aal2') {
+				window.location.href = '/';
+			}
 		}
 	});
 </script>
@@ -90,9 +208,9 @@ import Layout from '../layouts/Layout.astro';
 		margin-bottom: 2rem;
 	}
 
-	.logo { 
-		width: 48px; height: 48px; border: 1px solid var(--color-primary); 
-		color: var(--color-primary); display: flex; align-items: center; 
+	.logo {
+		width: 48px; height: 48px; border: 1px solid var(--color-primary);
+		color: var(--color-primary); display: flex; align-items: center;
 		justify-content: center; font-family: var(--font-serif); font-size: 1.8rem;
 	}
 
@@ -124,9 +242,7 @@ import Layout from '../layouts/Layout.astro';
 		transition: border-color 0.3s;
 	}
 
-	input:focus {
-		border-color: var(--color-primary);
-	}
+	input:focus { border-color: var(--color-primary); }
 
 	.error-text {
 		color: #fecaca;
@@ -140,4 +256,42 @@ import Layout from '../layouts/Layout.astro';
 		padding: 1rem;
 		font-size: 1rem;
 	}
+
+	/* MFA step */
+	.mfa-header {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.mfa-icon {
+		width: 56px; height: 56px;
+		border: 1px solid var(--color-primary);
+		color: var(--color-primary);
+		border-radius: 50%;
+		display: flex; align-items: center; justify-content: center;
+	}
+
+	.mfa-title { font-size: 1.8rem; }
+
+	#totp-code {
+		text-align: center;
+		font-size: 1.5rem;
+		letter-spacing: 0.3em;
+		font-family: monospace;
+	}
+
+	.text-btn {
+		background: none;
+		border: none;
+		color: var(--color-text-muted);
+		font-size: 0.85rem;
+		cursor: pointer;
+		margin-top: 1.25rem;
+		padding: 0;
+		transition: color 0.2s;
+	}
+	.text-btn:hover { color: var(--color-primary); }
 </style>

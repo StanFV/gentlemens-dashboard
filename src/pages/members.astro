@@ -9,25 +9,53 @@ import AppLayout from '../layouts/AppLayout.astro';
 		const userListEl = document.getElementById('user-list');
 		if (!userListEl) return;
 
-		const { data, error } = await supabase
+		// Try with mfa_enabled first; fall back if the column doesn't exist yet
+		let data: any[] | null = null;
+		let hasMFA = true;
+
+		const result = await supabase
 			.from('profiles')
-			.select('username, full_name, avatar_url')
+			.select('username, full_name, avatar_url, mfa_enabled, bio, current_work')
 			.order('username', { ascending: true });
 
-		if (error) {
-			console.error('Error fetching users:', error);
-			userListEl.innerHTML = '<div class="error">Failed to fetch members.</div>';
-			return;
+		if (result.error) {
+			// mfa_enabled column likely missing — retry without it
+			hasMFA = false;
+			const fallback = await supabase
+				.from('profiles')
+				.select('username, full_name, avatar_url, bio, current_work')
+				.order('username', { ascending: true });
+
+			if (fallback.error) {
+				console.error('Error fetching users:', fallback.error);
+				userListEl.innerHTML = '<div class="error">Failed to fetch members.</div>';
+				return;
+			}
+			data = fallback.data;
+		} else {
+			data = result.data;
 		}
 
 		if (data) {
 			userListEl.innerHTML = data.map(user => `
-				<div class="user-list-item">
-					<img src="${user.avatar_url || `https://ui-avatars.com/api/?name=${user.username || 'User'}&background=1c1917&color=c5a059`}" class="user-list-avatar" />
-					<div class="user-list-info">
-						<p class="user-list-name">${user.full_name || 'Anonymous Gentleman'}</p>
-						<p class="user-list-username">@${user.username || 'unknown'}</p>
+				<div class="user-card">
+					<div class="user-card-top">
+						<img src="${user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || 'User')}&background=1c1917&color=c5a059`}" class="user-card-avatar" />
+						<div class="user-card-meta">
+							<div class="user-card-nameline">
+								<span class="user-card-name">${user.full_name || 'Anonymous Gentleman'}</span>
+								<span class="user-card-username">@${user.username || 'unknown'}</span>
+								${hasMFA && user.mfa_enabled ? `
+									<div class="mfa-badge" title="Two-factor authentication enabled">
+										<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+										2FA
+									</div>
+								` : ''}
+							</div>
+							${user.current_work ? `<p class="user-card-work"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>${user.current_work}</p>` : ''}
+						</div>
 					</div>
+					${user.bio ? `<p class="user-card-bio">${user.bio}</p>` : ''}
 				</div>
 			`).join('');
 		}
@@ -58,50 +86,87 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.members-header .subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
 	.members-grid { display: flex; flex-direction: column; gap: 2rem; }
-	
+
 	.members-section { padding: 2.5rem; }
 	.members-section h2 { font-size: 1.8rem; margin-bottom: 2rem; }
 
-	/* Member List Styles */
 	.user-list {
 		display: flex;
 		flex-direction: column;
 		border-top: 1px solid var(--color-border);
 	}
 
-	.user-list-item {
-		padding: 1rem 0;
-		display: flex;
-		align-items: center;
-		gap: 1rem;
+	.user-card {
+		padding: 1.25rem 0;
 		border-bottom: 1px solid var(--color-border);
 		transition: all 0.2s;
 	}
-	.user-list-item:last-child { border-bottom: none; }
-	.user-list-item:hover .user-list-name { color: var(--color-primary); }
+	.user-card:last-child { border-bottom: none; }
 
-	.user-list-avatar {
-		width: 32px !important;
-		height: 32px !important;
-		min-width: 32px;
-		border-radius: 4px;
+	.user-card-top {
+		display: flex;
+		align-items: flex-start;
+		gap: 1rem;
+	}
+
+	.user-card-avatar {
+		width: 40px !important;
+		height: 40px !important;
+		min-width: 40px;
+		border-radius: 6px;
 		border: 1px solid var(--color-border);
 		object-fit: cover;
+		margin-top: 2px;
 	}
 
-	.user-list-info {
+	.user-card-meta { flex-grow: 1; }
+
+	.user-card-nameline {
 		display: flex;
-		flex-direction: row;
-		align-items: baseline;
-		gap: 0.75rem;
-		flex-grow: 1;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.25rem;
 	}
 
-	.user-list-name { font-size: 0.9rem; font-weight: 500; color: var(--color-text); transition: color 0.2s; }
-	.user-list-username { font-size: 0.8rem; color: var(--color-text-muted); font-family: monospace; }
+	.user-card-name { font-size: 0.95rem; font-weight: 600; color: var(--color-text); }
+	.user-card-username { font-size: 0.8rem; color: var(--color-text-muted); font-family: monospace; }
+
+	.user-card-work {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.8rem;
+		color: var(--color-primary);
+		margin-top: 0.15rem;
+	}
+
+	.user-card-bio {
+		font-size: 0.85rem;
+		color: var(--color-text-muted);
+		line-height: 1.55;
+		margin-top: 0.65rem;
+		padding-left: calc(40px + 1rem);
+		white-space: pre-wrap;
+	}
+
+	.mfa-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		color: #4ade80;
+		background: #4ade8012;
+		border: 1px solid #4ade8035;
+		padding: 0.2rem 0.55rem;
+		border-radius: 100px;
+		flex-shrink: 0;
+	}
 
 	.loading-state, .error { padding: 2rem; text-align: center; color: var(--color-text-muted); font-style: italic; font-size: 0.85rem; }
-	
+
 	.gold-text { color: var(--color-primary); }
 	.italic { font-style: italic; }
 </style>

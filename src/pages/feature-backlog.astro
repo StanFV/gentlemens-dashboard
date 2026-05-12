@@ -2,10 +2,10 @@
 import AppLayout from '../layouts/AppLayout.astro';
 ---
 
-<AppLayout title="Feature Checklist | Gentlemen's Dashboard">
+<AppLayout title="Feature Backlog | Gentlemen's Dashboard">
 	<header class="page-header">
 		<div>
-			<h1 class="serif">Feature <span class="gold-text italic">Checklist</span></h1>
+			<h1 class="serif">Feature <span class="gold-text italic">Backlog</span></h1>
 			<p class="subtitle">Suggest, manage, and track upcoming dashboard refinements.</p>
 		</div>
 		<button id="open-modal-btn" class="btn-primary">+ Create New Request</button>
@@ -250,7 +250,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 						type: 'feature_status_changed',
 						title: 'Feature Status Updated',
 						content: `Status of "${payload.title}" changed from ${oldFeature.status} to ${payload.status}`,
-						link: '/feature-checklist'
+						link: '/feature-backlog'
 					});
 				} else if (!result.error) {
 					// General update notification (optional, maybe only for major changes)
@@ -259,7 +259,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 						type: 'feature_updated',
 						title: 'Feature Request Updated',
 						content: `"${payload.title}" was updated.`,
-						link: '/feature-checklist'
+						link: '/feature-backlog'
 					});
 				}
 			} else {
@@ -272,7 +272,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 						type: 'feature_added',
 						title: 'New Feature Requested',
 						content: `A new feature "${payload.title}" has been proposed.`,
-						link: '/feature-checklist'
+						link: '/feature-backlog'
 					});
 				}
 			}

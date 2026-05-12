@@ -7,6 +7,8 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	let userId = '';
 	let userEmail = '';
+	let mfaFactorId = '';
+	let mfaChallengeId = '';
 
 	// Get session info
 	supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -14,12 +16,13 @@ import AppLayout from '../layouts/AppLayout.astro';
 			userId = session.user.id;
 			userEmail = session.user.email || '';
 			loadProfile(userId);
+			loadMFAStatus();
 		}
 	});
 
 	// Check if this is a first-time setup
 	const urlParams = new URLSearchParams(window.location.search);
-	const isSetup = urlParams.get('setup') === 'true';
+	const isSetup = urlParams.get('setup') === 'true' || urlParams.get('mfa') === 'prompt';
 	if (isSetup) {
 		const setupNotice = document.getElementById('setup-notice');
 		if (setupNotice) setupNotice.style.display = 'block';
@@ -28,26 +31,29 @@ import AppLayout from '../layouts/AppLayout.astro';
 	async function loadProfile(id: string) {
 		const { data } = await supabase
 			.from('profiles')
-			.select('username, full_name, avatar_url')
+			.select('username, full_name, avatar_url, bio, current_work')
 			.eq('id', id)
 			.single();
 
 		if (data) {
 			(document.getElementById('username') as HTMLInputElement).value = data.username || '';
 			(document.getElementById('full_name') as HTMLInputElement).value = data.full_name || '';
+			(document.getElementById('bio') as HTMLTextAreaElement).value = data.bio || '';
+			(document.getElementById('current_work') as HTMLInputElement).value = data.current_work || '';
 			if (data.avatar_url) {
 				(document.getElementById('avatar-preview') as HTMLImageElement).src = data.avatar_url;
 			}
 		}
 	}
 
-	// Update Profile Logic
+	// ── Profile ──────────────────────────────────────────────────────────────
+
 	const profileForm = document.getElementById('profile-form');
 	profileForm?.addEventListener('submit', async (e) => {
 		e.preventDefault();
 		const formData = new FormData(profileForm as HTMLFormElement);
 		const username = formData.get('username') as string;
-		
+
 		if (username.length < 3) {
 			alert('Username must be at least 3 characters.');
 			return;
@@ -57,6 +63,8 @@ import AppLayout from '../layouts/AppLayout.astro';
 			id: userId,
 			username: username,
 			full_name: formData.get('full_name'),
+			bio: formData.get('bio') || null,
+			current_work: formData.get('current_work') || null,
 			updated_at: new Date(),
 		};
 
@@ -66,11 +74,12 @@ import AppLayout from '../layouts/AppLayout.astro';
 			else alert(error.message);
 		} else {
 			alert('Profile updated successfully!');
-			window.location.href = '/'; // Go back to dashboard after successful update
+			window.location.href = '/';
 		}
 	});
 
-	// Secure Password Change Logic
+	// ── Password ─────────────────────────────────────────────────────────────
+
 	const passwordForm = document.getElementById('password-form');
 	passwordForm?.addEventListener('submit', async (e) => {
 		e.preventDefault();
@@ -89,7 +98,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 			return;
 		}
 
-		// 1. Re-authenticate to verify current password
 		const { error: authError } = await supabase.auth.signInWithPassword({
 			email: userEmail,
 			password: currentPassword,
@@ -100,9 +108,8 @@ import AppLayout from '../layouts/AppLayout.astro';
 			return;
 		}
 
-		// 2. Update to new password
 		const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
-		
+
 		if (updateError) alert(updateError.message);
 		else {
 			alert('Password changed successfully!');
@@ -110,9 +117,10 @@ import AppLayout from '../layouts/AppLayout.astro';
 		}
 	});
 
-	// Avatar Upload
+	// ── Avatar ────────────────────────────────────────────────────────────────
+
 	const avatarInput = document.getElementById('avatar-upload') as HTMLInputElement;
-	avatarInput?.addEventListener('change', async (e) => {
+	avatarInput?.addEventListener('change', async () => {
 		const file = avatarInput.files?.[0];
 		if (!file) return;
 
@@ -141,16 +149,167 @@ import AppLayout from '../layouts/AppLayout.astro';
 		if (updateError) alert(updateError.message);
 		else {
 			(document.getElementById('avatar-preview') as HTMLImageElement).src = publicUrl;
-			// Refresh sidebars manually or reload
 			const avatarEls = document.querySelectorAll('.user-avatar-img');
 			avatarEls.forEach(el => (el as HTMLImageElement).src = publicUrl);
 		}
+	});
+
+	// ── MFA ───────────────────────────────────────────────────────────────────
+
+	async function loadMFAStatus() {
+		const { data, error } = await supabase.auth.mfa.listFactors();
+		if (error) return;
+
+		const verified = data?.totp?.find(f => f.status === 'verified');
+
+		if (verified) {
+			mfaFactorId = verified.id;
+			setMFAView('enabled');
+		} else {
+			setMFAView('disabled');
+		}
+
+		// Show "setup recommended" banner if first-time setup
+		if (isSetup && !verified) {
+			const rec = document.getElementById('mfa-recommend');
+			if (rec) rec.style.display = 'flex';
+		}
+	}
+
+	function setMFAView(view: 'disabled' | 'enabled' | 'enroll' | 'disable-confirm') {
+		(['disabled', 'enabled', 'enroll', 'disable-confirm'] as const).forEach(id => {
+			const el = document.getElementById(`mfa-${id}`);
+			if (el) el.style.display = id === view ? 'block' : 'none';
+		});
+		setMFAError('');
+	}
+
+	function setMFAError(msg: string) {
+		const el = document.getElementById('mfa-error');
+		if (el) el.textContent = msg;
+	}
+
+	// Enable: start enrollment
+	document.getElementById('mfa-enable-btn')?.addEventListener('click', async () => {
+		const btn = document.getElementById('mfa-enable-btn') as HTMLButtonElement;
+		btn.textContent = 'Loading...';
+		btn.disabled = true;
+
+		const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+
+		btn.textContent = 'Enable 2FA';
+		btn.disabled = false;
+
+		if (error || !data) {
+			setMFAError(error?.message || 'Failed to start enrollment.');
+			return;
+		}
+
+		mfaFactorId = data.id;
+		(document.getElementById('mfa-qr') as HTMLImageElement).src = data.totp.qr_code;
+		(document.getElementById('mfa-secret') as HTMLElement).textContent = data.totp.secret;
+		setMFAView('enroll');
+	});
+
+	// Verify enrollment code
+	document.getElementById('mfa-verify-btn')?.addEventListener('click', async () => {
+		const code = (document.getElementById('mfa-enroll-code') as HTMLInputElement).value.replace(/\s/g, '');
+		const btn = document.getElementById('mfa-verify-btn') as HTMLButtonElement;
+		btn.textContent = 'Verifying...';
+		btn.disabled = true;
+
+		const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaFactorId, code });
+
+		btn.textContent = 'Verify & Activate';
+		btn.disabled = false;
+
+		if (error) {
+			setMFAError('Incorrect code. Please try again.');
+			return;
+		}
+
+		// Sync to profiles table so members page can display it
+		await supabase.from('profiles').upsert({ id: userId, mfa_enabled: true });
+
+		(document.getElementById('mfa-recommend') as HTMLElement | null)?.style &&
+			((document.getElementById('mfa-recommend') as HTMLElement).style.display = 'none');
+
+		loadMFAStatus();
+	});
+
+	// Cancel enrollment
+	document.getElementById('mfa-cancel-btn')?.addEventListener('click', async () => {
+		if (mfaFactorId) {
+			await supabase.auth.mfa.unenroll({ factorId: mfaFactorId }).catch(() => {});
+			mfaFactorId = '';
+		}
+		(document.getElementById('mfa-enroll-code') as HTMLInputElement).value = '';
+		setMFAView('disabled');
+	});
+
+	// Disable: show confirmation
+	document.getElementById('mfa-disable-btn')?.addEventListener('click', () => {
+		(document.getElementById('mfa-disable-code') as HTMLInputElement).value = '';
+		setMFAView('disable-confirm');
+	});
+
+	// Cancel disable
+	document.getElementById('mfa-cancel-disable-btn')?.addEventListener('click', () => {
+		setMFAView('enabled');
+	});
+
+	// Confirm disable
+	document.getElementById('mfa-confirm-disable-btn')?.addEventListener('click', async () => {
+		const code = (document.getElementById('mfa-disable-code') as HTMLInputElement).value.replace(/\s/g, '');
+		const btn = document.getElementById('mfa-confirm-disable-btn') as HTMLButtonElement;
+		btn.textContent = 'Disabling...';
+		btn.disabled = true;
+
+		// Elevate to AAL2 if needed before unenrolling
+		const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+		if (aalData.currentLevel !== 'aal2') {
+			const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
+			if (cErr || !challenge) {
+				setMFAError(cErr?.message || 'Failed to create challenge.');
+				btn.textContent = 'Confirm Disable';
+				btn.disabled = false;
+				return;
+			}
+
+			const { error: vErr } = await supabase.auth.mfa.verify({
+				factorId: mfaFactorId,
+				challengeId: challenge.id,
+				code,
+			});
+
+			if (vErr) {
+				setMFAError('Incorrect code. Please try again.');
+				btn.textContent = 'Confirm Disable';
+				btn.disabled = false;
+				return;
+			}
+		}
+
+		const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
+
+		btn.textContent = 'Confirm Disable';
+		btn.disabled = false;
+
+		if (error) {
+			setMFAError(error.message);
+			return;
+		}
+
+		await supabase.from('profiles').upsert({ id: userId, mfa_enabled: false });
+		mfaFactorId = '';
+		loadMFAStatus();
 	});
 </script>
 
 <AppLayout title="Account Settings | Gentlemen's Dashboard">
 	<div id="setup-notice" class="alert-box" style="display: none;">
-		<p><strong>Welcome, Gentleman.</strong> Please complete your profile by setting a username before proceeding.</p>
+		<p><strong>Welcome, Gentleman.</strong> Please complete your profile by setting a username below.</p>
 	</div>
 
 	<header class="account-header">
@@ -180,6 +339,14 @@ import AppLayout from '../layouts/AppLayout.astro';
 					<label for="full_name">Full Name</label>
 					<input type="text" id="full_name" name="full_name" placeholder="e.g. James Bond" />
 				</div>
+				<div class="form-group">
+					<label for="current_work">Currently Working At</label>
+					<input type="text" id="current_work" name="current_work" placeholder="e.g. MI6, Freelance, Startup X" />
+				</div>
+				<div class="form-group">
+					<label for="bio">Euvres & Experiences</label>
+					<textarea id="bio" name="bio" rows="4" placeholder="Share your finest achievements, projects, and experiences..."></textarea>
+				</div>
 				<button type="submit" class="btn-primary">Update Profile</button>
 			</form>
 		</section>
@@ -205,6 +372,100 @@ import AppLayout from '../layouts/AppLayout.astro';
 			</form>
 		</section>
 	</div>
+
+	<!-- Two-Factor Authentication Section -->
+	<section class="card settings-section mfa-card">
+		<div class="mfa-card-header">
+			<div>
+				<h2 class="serif">Two-Factor Authentication</h2>
+				<p class="mfa-desc">Protect your account with a time-based one-time password (TOTP) app such as Google Authenticator or Authy.</p>
+			</div>
+		</div>
+
+		<!-- Setup recommended banner (shown on first-time setup) -->
+		<div id="mfa-recommend" class="mfa-recommend" style="display: none;">
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+			<span>Recommended: Enable two-factor authentication to protect your account.</span>
+		</div>
+
+		<!-- State: disabled -->
+		<div id="mfa-disabled" style="display: none;">
+			<div class="mfa-status-row">
+				<div class="mfa-status-badge off">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+					Not configured
+				</div>
+				<button id="mfa-enable-btn" class="btn-primary">Enable 2FA</button>
+			</div>
+		</div>
+
+		<!-- State: enabled -->
+		<div id="mfa-enabled" style="display: none;">
+			<div class="mfa-status-row">
+				<div class="mfa-status-badge on">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+					Active
+				</div>
+				<button id="mfa-disable-btn" class="btn-danger">Disable 2FA</button>
+			</div>
+		</div>
+
+		<!-- State: enrollment flow -->
+		<div id="mfa-enroll" style="display: none;">
+			<div class="enroll-layout">
+				<div class="enroll-qr-side">
+					<p class="enroll-step-label">Step 1 — Scan with your authenticator app</p>
+					<div class="qr-wrapper">
+						<img id="mfa-qr" src="" alt="QR Code" class="qr-img" />
+					</div>
+					<p class="enroll-step-label" style="margin-top: 1.5rem;">Or enter the key manually:</p>
+					<code id="mfa-secret" class="secret-key"></code>
+				</div>
+				<div class="enroll-verify-side">
+					<p class="enroll-step-label">Step 2 — Enter the 6-digit code to verify</p>
+					<div class="form-group">
+						<label for="mfa-enroll-code">Authentication Code</label>
+						<input
+							type="text"
+							id="mfa-enroll-code"
+							placeholder="000000"
+							maxlength="6"
+							inputmode="numeric"
+							autocomplete="one-time-code"
+						/>
+					</div>
+					<div class="enroll-actions">
+						<button id="mfa-verify-btn" class="btn-primary">Verify & Activate</button>
+						<button id="mfa-cancel-btn" class="btn-ghost">Cancel</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- State: disable confirmation -->
+		<div id="mfa-disable-confirm" style="display: none;">
+			<p class="disable-confirm-text">Enter your current authenticator code to disable two-factor authentication.</p>
+			<div class="disable-confirm-row">
+				<div class="form-group" style="flex: 1; margin: 0;">
+					<label for="mfa-disable-code">Authentication Code</label>
+					<input
+						type="text"
+						id="mfa-disable-code"
+						placeholder="000000"
+						maxlength="6"
+						inputmode="numeric"
+						autocomplete="one-time-code"
+					/>
+				</div>
+				<div class="disable-actions">
+					<button id="mfa-confirm-disable-btn" class="btn-danger">Confirm Disable</button>
+					<button id="mfa-cancel-disable-btn" class="btn-ghost">Cancel</button>
+				</div>
+			</div>
+		</div>
+
+		<p id="mfa-error" class="mfa-error-text"></p>
+	</section>
 </AppLayout>
 
 <style>
@@ -222,7 +483,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 	}
 
 	.account-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem; align-items: start; }
-	
+
 	.settings-section { padding: 2.5rem; }
 	.settings-section h2 { font-size: 1.8rem; margin-bottom: 2rem; }
 
@@ -232,14 +493,158 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	.form-group { margin-bottom: 1.5rem; }
 	label { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); margin-bottom: 0.5rem; }
-	input { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text); padding: 0.8rem 1rem; border-radius: 8px; outline: none; }
-	input:focus { border-color: var(--color-primary); }
+	input, textarea { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text); padding: 0.8rem 1rem; border-radius: 8px; outline: none; font-family: inherit; font-size: inherit; resize: vertical; }
+	input:focus, textarea:focus { border-color: var(--color-primary); }
 
 	.divider { height: 1px; background: var(--color-border); margin: 2rem 0; }
 	.gold-text { color: var(--color-primary); }
 	.italic { font-style: italic; }
 
+	/* ── MFA section ── */
+	.mfa-card { margin-top: 2rem; }
+	.mfa-card-header { margin-bottom: 1.5rem; }
+	.mfa-card-header h2 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+	.mfa-desc { color: var(--color-text-muted); font-size: 0.9rem; max-width: 60ch; }
+
+	.mfa-recommend {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		background: var(--color-primary-dim);
+		border: 1px solid var(--color-primary);
+		color: var(--color-primary);
+		border-radius: 8px;
+		padding: 0.9rem 1.25rem;
+		font-size: 0.875rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.mfa-status-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.mfa-status-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+		font-weight: 500;
+		padding: 0.4rem 0.9rem;
+		border-radius: 100px;
+		border: 1px solid;
+	}
+	.mfa-status-badge.off {
+		color: var(--color-text-muted);
+		border-color: var(--color-border);
+		background: transparent;
+	}
+	.mfa-status-badge.on {
+		color: #4ade80;
+		border-color: #4ade8040;
+		background: #4ade8010;
+	}
+
+	/* Enrollment layout */
+	.enroll-layout {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 3rem;
+		align-items: start;
+	}
+
+	.enroll-step-label {
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-muted);
+		margin-bottom: 1rem;
+	}
+
+	.qr-wrapper {
+		background: white;
+		border-radius: 8px;
+		padding: 0.75rem;
+		display: inline-block;
+	}
+	.qr-img { width: 160px; height: 160px; display: block; }
+
+	.secret-key {
+		display: block;
+		font-size: 0.8rem;
+		word-break: break-all;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		padding: 0.6rem 0.9rem;
+		border-radius: 6px;
+		color: var(--color-primary);
+		font-family: monospace;
+		max-width: 220px;
+	}
+
+	.enroll-actions {
+		display: flex;
+		gap: 0.75rem;
+		margin-top: 1.5rem;
+		flex-wrap: wrap;
+	}
+
+	/* Disable confirm */
+	.disable-confirm-text {
+		font-size: 0.9rem;
+		color: var(--color-text-muted);
+		margin-bottom: 1.25rem;
+	}
+	.disable-confirm-row {
+		display: flex;
+		gap: 1.5rem;
+		align-items: flex-end;
+		flex-wrap: wrap;
+	}
+	.disable-actions {
+		display: flex;
+		gap: 0.75rem;
+		flex-shrink: 0;
+		padding-bottom: 0; /* align with input bottom */
+	}
+
+	.mfa-error-text {
+		color: #fecaca;
+		font-size: 0.85rem;
+		margin-top: 1rem;
+		min-height: 1.2rem;
+	}
+
+	/* Buttons */
+	.btn-danger {
+		background: transparent;
+		color: #f87171;
+		border: 1px solid #f8717140;
+		padding: 0.6rem 1.5rem;
+		border-radius: 100px;
+		font-size: 0.85rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.btn-danger:hover { background: #f8717115; border-color: #f87171; }
+
+	.btn-ghost {
+		background: transparent;
+		color: var(--color-text-muted);
+		border: 1px solid var(--color-border);
+		padding: 0.6rem 1.5rem;
+		border-radius: 100px;
+		font-size: 0.85rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.btn-ghost:hover { color: var(--color-text); border-color: var(--color-text-muted); }
+
 	@media (max-width: 1000px) {
 		.account-grid { grid-template-columns: 1fr; }
+		.enroll-layout { grid-template-columns: 1fr; }
+		.disable-confirm-row { flex-direction: column; }
 	}
 </style>
