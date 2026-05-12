@@ -166,7 +166,7 @@ const isActive = (path: string) => {
 			sidebar?.classList.add('collapsible');
 		}
 	});
-	</script>
+
 	async function markAllAsRead() {
 		const { data: { session } } = await supabase.auth.getSession();
 		if (!session) return;
