@@ -366,6 +366,7 @@ const isActive = (path: string) => {
 		height: 20px;
 		background: var(--color-primary);
 		border-radius: 0 4px 4px 0;
+		transition: left 0.3s;
 	}
 
 	.nav-item.logout:hover { color: #fecaca; }
@@ -547,10 +548,37 @@ const isActive = (path: string) => {
 			overflow: hidden;
 			width: 100%;
 			white-space: nowrap;
+			justify-content: center;
+		}
+
+		.sidebar.collapsible:hover .nav-item {
+			justify-content: flex-start;
+		}
+
+		/* Fix active indicator in collapsed state */
+		.sidebar.collapsible .nav-item.active::before {
+			left: -1.5rem;
+		}
+
+		.sidebar.collapsible:hover .nav-item.active::before {
+			left: -2rem;
 		}
 		
 		.sidebar.collapsible .logo {
 			flex-shrink: 0;
+			margin: 0 auto;
+		}
+
+		.sidebar.collapsible:hover .logo {
+			margin: 0;
+		}
+
+		.sidebar.collapsible .brand {
+			justify-content: center;
+		}
+
+		.sidebar.collapsible:hover .brand {
+			justify-content: flex-start;
 		}
 
 		.sidebar.collapsible .user-pill {
