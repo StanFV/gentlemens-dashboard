@@ -15,6 +15,12 @@ const isActive = (path: string) => {
 <script>
 	import { supabase } from '../lib/supabase';
 
+	// Redirect invite links to the set-password page before Supabase processes the hash
+	const hashParams = new URLSearchParams(window.location.hash.substring(1));
+	if (hashParams.get('type') === 'invite') {
+		window.location.replace('/set-password' + window.location.hash);
+	}
+
 	// Auth protection
 	supabase.auth.getSession().then(async ({ data: { session } }) => {
 		if (!session) {
