@@ -21,3 +21,6 @@ pnpm-debug.log*
 
 # astro
 .astro/
+
+# gemini
+GEMINI.md
