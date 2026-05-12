@@ -9,6 +9,23 @@ import AppLayout from '../layouts/AppLayout.astro';
 	</header>
 
 	<div class="settings-grid">
+		<!-- UI Section -->
+		<section class="card settings-section">
+			<h2 class="serif">Interface Preferences</h2>
+			<div class="info-grid">
+				<div class="setting-item">
+					<div class="setting-info">
+						<label>Always show sidebar</label>
+						<p class="setting-desc">Keep the sidebar expanded on desktop instead of collapsing it.</p>
+					</div>
+					<label class="switch">
+						<input type="checkbox" id="sidebar-toggle-checkbox">
+						<span class="slider round"></span>
+					</label>
+				</div>
+			</div>
+		</section>
+
 		<!-- Supabase Section -->
 		<section class="card settings-section">
 			<h2 class="serif">Technical Infrastructure</h2>
@@ -36,6 +53,26 @@ import AppLayout from '../layouts/AppLayout.astro';
 	</div>
 </AppLayout>
 
+<script>
+	const sidebarToggle = document.getElementById('sidebar-toggle-checkbox') as HTMLInputElement;
+	
+	if (sidebarToggle) {
+		// Load current setting
+		const alwaysShow = localStorage.getItem('sidebar-always-show') === 'true';
+		sidebarToggle.checked = alwaysShow;
+
+		sidebarToggle.addEventListener('change', () => {
+			const isChecked = sidebarToggle.checked;
+			localStorage.setItem('sidebar-always-show', isChecked ? 'true' : 'false');
+			
+			// Dispatch event to update sidebar in AppLayout
+			window.dispatchEvent(new CustomEvent('sidebar-toggle', { 
+				detail: { alwaysShow: isChecked } 
+			}));
+		});
+	}
+</script>
+
 <style is:global>
 	.settings-header { margin-bottom: 3rem; }
 	.settings-header h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
@@ -48,6 +85,25 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	.info-grid { display: flex; flex-direction: column; gap: 1.5rem; }
 	.info-group label { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); margin-bottom: 0.5rem; }
+
+	.setting-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1rem 0;
+	}
+	.setting-desc { color: var(--color-text-muted); font-size: 0.9rem; margin-top: 0.25rem; }
+
+	/* Switch styles */
+	.switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+	.switch input { opacity: 0; width: 0; height: 0; }
+	.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-border); transition: .4s; }
+	.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; }
+	input:checked + .slider { background-color: var(--color-primary); }
+	input:focus + .slider { box-shadow: 0 0 1px var(--color-primary); }
+	input:checked + .slider:before { transform: translateX(26px); }
+	.slider.round { border-radius: 24px; }
+	.slider.round:before { border-radius: 50%; }
 	
 	.url-display {
 		display: flex;
