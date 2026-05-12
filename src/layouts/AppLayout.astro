@@ -517,7 +517,7 @@ const isActive = (path: string) => {
 		.sidebar.collapsible {
 			width: 100px;
 			padding: 3rem 1.5rem;
-			transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s;
+			transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 			overflow: hidden;
 		}
 
@@ -526,43 +526,53 @@ const isActive = (path: string) => {
 			padding: 3rem 2rem;
 		}
 
+		/* Fade text via opacity + max-width instead of display:none to allow smooth transition */
 		.sidebar.collapsible .brand-name,
 		.sidebar.collapsible .nav-text,
-		.sidebar.collapsible .user-meta,
 		.sidebar.collapsible .chevron-icon {
-			display: none;
+			opacity: 0;
+			max-width: 0;
+			overflow: hidden;
+			white-space: nowrap;
+			transition: opacity 0.15s ease, max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 		}
 
 		.sidebar.collapsible:hover .brand-name,
 		.sidebar.collapsible:hover .nav-text,
-		.sidebar.collapsible:hover .user-meta,
 		.sidebar.collapsible:hover .chevron-icon {
-			display: block;
 			opacity: 1;
-			margin-left: 1rem;
+			max-width: 200px;
+			transition: opacity 0.25s ease 0.1s, max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		}
 
 		.sidebar.collapsible .user-meta {
-			display: none;
-		}
-		
-		.sidebar.collapsible:hover .user-meta {
 			display: flex;
 			flex-direction: column;
+			opacity: 0;
+			max-width: 0;
+			overflow: hidden;
+			transition: opacity 0.15s ease, max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 		}
 
+		.sidebar.collapsible:hover .user-meta {
+			opacity: 1;
+			max-width: 200px;
+			transition: opacity 0.25s ease 0.1s, max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+		}
+
+		/* flex-start + stable padding-left keeps icons stationary; only gap animates */
 		.sidebar.collapsible .nav-item {
 			gap: 0;
-			justify-content: center;
+			justify-content: flex-start;
+			padding-left: 1rem;
+			transition: gap 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		}
 
 		.sidebar.collapsible:hover .nav-item {
 			gap: 1rem;
-			justify-content: flex-start;
 			padding-left: 1rem;
 		}
 
-		/* Fix active indicator in collapsed state */
 		.sidebar.collapsible .nav-item.active::before {
 			left: -1.5rem;
 		}
@@ -570,30 +580,32 @@ const isActive = (path: string) => {
 		.sidebar.collapsible:hover .nav-item.active::before {
 			left: -1rem;
 		}
-		
+
 		.sidebar.collapsible .logo {
-			margin: 0;
+			flex-shrink: 0;
 		}
 
+		/* Brand: flex-start throughout, only gap animates */
 		.sidebar.collapsible .brand {
 			gap: 0;
-			justify-content: center;
+			justify-content: flex-start;
+			transition: gap 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		}
 
 		.sidebar.collapsible:hover .brand {
 			gap: 1rem;
-			justify-content: flex-start;
 		}
 
+		/* User pill: flex-start throughout, gap + padding animate smoothly */
 		.sidebar.collapsible .user-pill {
 			padding: 0.75rem;
-			justify-content: center;
+			justify-content: flex-start;
 			gap: 0;
+			transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1), gap 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		}
-		
+
 		.sidebar.collapsible:hover .user-pill {
 			padding: 1rem;
-			justify-content: flex-start;
 			gap: 0.75rem;
 		}
 
