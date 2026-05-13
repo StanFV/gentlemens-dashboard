@@ -31,11 +31,20 @@ const isActive = (path: string) => {
 	});
 
 	async function loadSidebarProfile(id: string) {
-		const { data } = await supabase
+		let { data, error } = await supabase
 			.from('profiles')
 			.select('username, full_name, avatar_url, tab_order')
 			.eq('id', id)
 			.single();
+
+		// If query failed (e.g. tab_order column not yet migrated), retry without it
+		if (error) {
+			({ data } = await supabase
+				.from('profiles')
+				.select('username, full_name, avatar_url')
+				.eq('id', id)
+				.single());
+		}
 
 		if (data) {
 			if (!data.username && window.location.pathname !== '/account') {
@@ -54,8 +63,8 @@ const isActive = (path: string) => {
 				const existing = (data.tab_order as string[]).filter((navId: string) => ALL_NAV_ITEMS.some(i => i.id === navId));
 				const missing = DEFAULT_TAB_ORDER.filter(navId => !existing.includes(navId));
 				currentTabOrder = [...existing, ...missing];
+				renderMobileTabs(currentTabOrder);
 			}
-			renderMobileTabs(currentTabOrder);
 		}
 	}
 
@@ -494,8 +503,29 @@ const isActive = (path: string) => {
 				</a>
 			</nav>
 
-			<!-- Mobile tab bar — populated by JS, shown instead of .nav on mobile -->
-			<div class="mobile-tabs" id="mobile-tabs"></div>
+			<!-- Mobile tab bar — default tabs rendered server-side, JS updates with user's saved order -->
+			<div class="mobile-tabs" id="mobile-tabs">
+				<a href="/" class={`nav-item mobile-tab${isActive('/') ? ' active' : ''}`}>
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+					<span class="nav-text">Dashboard</span>
+				</a>
+				<a href="/projects" class={`nav-item mobile-tab${isActive('/projects') ? ' active' : ''}`}>
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+					<span class="nav-text">Projects</span>
+				</a>
+				<a href="/members" class={`nav-item mobile-tab${isActive('/members') ? ' active' : ''}`}>
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+					<span class="nav-text">Members</span>
+				</a>
+				<a href="/settings" class={`nav-item mobile-tab${isActive('/settings') ? ' active' : ''}`}>
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1-2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+					<span class="nav-text">Settings</span>
+				</a>
+				<button class="nav-item mobile-tab more-tab-btn" id="more-tab-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+					<span class="nav-text">More</span>
+				</button>
+			</div>
 
 			<div class="sidebar-bottom">
 				<div class="profile-wrapper">
