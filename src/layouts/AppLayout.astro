@@ -626,6 +626,7 @@ const isActive = (path: string) => {
 
 	/* --- Mobile --- */
 	@media (max-width: 900px) {
+		body { overflow-y: auto; }
 		.app { flex-direction: column; height: auto; overflow: visible; }
 		.sidebar { 
 			width: 100%; height: auto; position: fixed; bottom: 0; z-index: 100;
