@@ -1,0 +1,273 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+
+let newsItems: { title: string; link: string; description: string; pubDate: string }[] = [];
+let rssError = false;
+
+try {
+	const response = await fetch('https://feeds.nos.nl/nosnieuwspolitiek', {
+		headers: { 'Accept': 'application/rss+xml, application/xml, text/xml' }
+	});
+	if (response.ok) {
+		const xml = await response.text();
+		const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+		newsItems = items.slice(0, 8).map(item => {
+			const title = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1]
+				|| item.match(/<title>(.*?)<\/title>/)?.[1] || '';
+			const link = item.match(/<link>(.*?)<\/link>/)?.[1]
+				|| item.match(/<guid[^>]*>(.*?)<\/guid>/)?.[1] || '#';
+			const description = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1]
+				|| item.match(/<description>(.*?)<\/description>/)?.[1] || '';
+			const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
+			return { title, link, description: description.replace(/<[^>]*>/g, '').substring(0, 120), pubDate };
+		});
+	} else {
+		rssError = true;
+	}
+} catch {
+	rssError = true;
+}
+---
+
+<AppLayout title="VVD | Gentlemen's Dashboard">
+	<header class="vvd-header">
+		<div class="vvd-title-row">
+			<div class="vvd-logo-badge">VVD</div>
+			<div>
+				<h1 class="serif">VVD <span class="gold-text italic">Hardenberg</span></h1>
+				<p class="subtitle">Snelle toegang tot tools, templates en politiek nieuws.</p>
+			</div>
+		</div>
+	</header>
+
+	<section class="quick-links-section">
+		<h2 class="serif section-title">Snelle toegang</h2>
+		<div class="quick-links-grid">
+
+			<a href="https://drive.google.com/drive/folders/1nV1njkAISypQP5xzYNkLcsIGijNu5KQv?usp=drive_link" target="_blank" rel="noopener noreferrer" class="quick-link-card card">
+				<div class="link-icon-wrap drive-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 87.3 78" fill="none">
+						<path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+						<path d="M43.65 25L29.9 1.2C28.55 2 27.4 3.1 26.6 4.5L1.2 49.5c-.8 1.4-1.2 2.95-1.2 4.5h27.5z" fill="#00ac47"/>
+						<path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H60.1l5.85 11.45z" fill="#ea4335"/>
+						<path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+						<path d="M60.1 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+						<path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.45 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+					</svg>
+				</div>
+				<div class="link-content">
+					<span class="link-label">Google Drive</span>
+					<h3 class="link-title">Templates map</h3>
+					<p class="link-desc">Toegang tot alle VVD template documenten en materialen.</p>
+				</div>
+				<div class="link-arrow">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17L17 7"/></svg>
+				</div>
+			</a>
+
+			<a href="https://gemini.google.com/gem/13ONnVhGAfpkb5s651D8IC4B47FceXv6J?usp=sharing" target="_blank" rel="noopener noreferrer" class="quick-link-card card">
+				<div class="link-icon-wrap gemini-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 192 192" fill="none">
+						<path d="M96 0C96 53 53 96 0 96C53 96 96 139 96 192C96 139 139 96 192 96C139 96 96 53 96 0Z" fill="url(#gemini-grad)"/>
+						<defs>
+							<linearGradient id="gemini-grad" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+								<stop offset="0%" stop-color="#4285f4"/>
+								<stop offset="100%" stop-color="#9b72cb"/>
+							</linearGradient>
+						</defs>
+					</svg>
+				</div>
+				<div class="link-content">
+					<span class="link-label">Google Gemini</span>
+					<h3 class="link-title">VVD AI-assistent</h3>
+					<p class="link-desc">Geconfigureerde Gemini agent voor VVD Hardenberg taken.</p>
+				</div>
+				<div class="link-arrow">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17L17 7"/></svg>
+				</div>
+			</a>
+
+			<a href="https://www.vvd.nl/gemeente-hardenberg/wp-admin/" target="_blank" rel="noopener noreferrer" class="quick-link-card card">
+				<div class="link-icon-wrap wp-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none">
+						<circle cx="12" cy="12" r="11" stroke="#21759b" stroke-width="1.5"/>
+						<path d="M2 12h4m12 0h4M12 2v4m0 12v4" stroke="#21759b" stroke-width="1.5" stroke-linecap="round"/>
+						<path d="M5.6 5.6l2.8 2.8m7.2 7.2l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" stroke="#21759b" stroke-width="1.5" stroke-linecap="round"/>
+					</svg>
+				</div>
+				<div class="link-content">
+					<span class="link-label">WordPress</span>
+					<h3 class="link-title">Websitebeheer</h3>
+					<p class="link-desc">Beheer de VVD Hardenberg website via het WordPress dashboard.</p>
+				</div>
+				<div class="link-arrow">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17L17 7"/></svg>
+				</div>
+			</a>
+
+		</div>
+	</section>
+
+	<section class="news-section">
+		<div class="news-header">
+			<div>
+				<h2 class="serif section-title">Politiek Nieuws</h2>
+				<p class="news-source">NOS Nieuws — Politiek</p>
+			</div>
+			<a href="https://nos.nl/nieuws/politiek" target="_blank" rel="noopener noreferrer" class="text-btn">Naar NOS →</a>
+		</div>
+
+		{rssError ? (
+			<div class="card error-card">
+				<p class="error-msg">Kon het nieuwsfeed niet laden. Controleer de verbinding of bezoek <a href="https://nos.nl/nieuws/politiek" target="_blank" rel="noopener noreferrer">nos.nl/nieuws/politiek</a> direct.</p>
+			</div>
+		) : newsItems.length === 0 ? (
+			<div class="card error-card">
+				<p class="error-msg">Geen nieuwsberichten gevonden.</p>
+			</div>
+		) : (
+			<div class="news-grid">
+				{newsItems.map((item, i) => (
+					<a href={item.link} target="_blank" rel="noopener noreferrer" class={`news-card card ${i === 0 ? 'news-featured' : ''}`}>
+						<div class="news-meta">
+							<span class="nos-badge">NOS</span>
+							{item.pubDate && <span class="news-date">{new Date(item.pubDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+						</div>
+						<h3 class="news-title">{item.title}</h3>
+						{item.description && <p class="news-desc">{item.description}…</p>}
+						<span class="news-read">Lees meer →</span>
+					</a>
+				))}
+			</div>
+		)}
+	</section>
+</AppLayout>
+
+<style is:global>
+	.vvd-header { margin-bottom: 3rem; }
+	.vvd-title-row { display: flex; align-items: center; gap: 1.5rem; }
+
+	.vvd-logo-badge {
+		font-family: var(--font-serif);
+		font-size: 1.4rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		color: #fff;
+		background: #003f8a;
+		border: 2px solid #003f8a;
+		padding: 0.6rem 1rem;
+		border-radius: 8px;
+		flex-shrink: 0;
+		line-height: 1;
+	}
+
+	.vvd-header h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 0.5rem; }
+	.gold-text { color: var(--color-primary); }
+	.italic { font-style: italic; }
+	.subtitle { color: var(--color-text-muted); font-size: 1rem; }
+
+	/* Quick Links */
+	.section-title { font-size: 1.8rem; margin-bottom: 1.5rem; }
+	.quick-links-section { margin-bottom: 3rem; }
+	.quick-links-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+
+	.quick-link-card {
+		display: flex;
+		align-items: flex-start;
+		gap: 1.25rem;
+		padding: 1.75rem;
+		text-decoration: none;
+		color: var(--color-text);
+		border-radius: 20px;
+		transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+		position: relative;
+	}
+	.quick-link-card:hover {
+		border-color: var(--color-primary);
+		transform: translateY(-2px);
+		box-shadow: 0 8px 24px rgba(197, 160, 89, 0.08);
+	}
+
+	.link-icon-wrap {
+		width: 52px;
+		height: 52px;
+		border-radius: 12px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+	}
+	.drive-icon { background: rgba(66, 133, 244, 0.08); border-color: rgba(66, 133, 244, 0.2); }
+	.gemini-icon { background: rgba(155, 114, 203, 0.08); border-color: rgba(155, 114, 203, 0.2); }
+	.wp-icon { background: rgba(33, 117, 155, 0.08); border-color: rgba(33, 117, 155, 0.2); }
+
+	.link-content { flex-grow: 1; }
+	.link-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); display: block; margin-bottom: 0.3rem; }
+	.link-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--color-text); }
+	.link-desc { font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.5; }
+
+	.link-arrow {
+		color: var(--color-text-muted);
+		opacity: 0.4;
+		transition: opacity 0.2s, color 0.2s;
+		flex-shrink: 0;
+		margin-top: 0.25rem;
+	}
+	.quick-link-card:hover .link-arrow { opacity: 1; color: var(--color-primary); }
+
+	/* News Section */
+	.news-section { margin-bottom: 3rem; }
+	.news-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
+	.news-source { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.25rem; }
+	.text-btn { color: var(--color-primary); text-decoration: none; font-size: 0.9rem; font-weight: 500; padding-top: 0.25rem; }
+	.text-btn:hover { text-decoration: underline; }
+
+	.news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
+
+	.news-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 1.5rem;
+		text-decoration: none;
+		color: var(--color-text);
+		border-radius: 16px;
+		transition: border-color 0.2s, transform 0.2s;
+	}
+	.news-card:hover { border-color: var(--color-primary); transform: translateY(-1px); }
+
+	.news-featured { grid-column: span 2; }
+
+	.news-meta { display: flex; align-items: center; gap: 0.75rem; }
+	.nos-badge {
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		background: #cc0000;
+		color: #fff;
+		padding: 0.2rem 0.5rem;
+		border-radius: 3px;
+	}
+	.news-date { font-size: 0.75rem; color: var(--color-text-muted); }
+
+	.news-title { font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--color-text); }
+	.news-featured .news-title { font-size: 1.2rem; }
+
+	.news-desc { font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.5; flex-grow: 1; }
+	.news-read { font-size: 0.8rem; color: var(--color-primary); font-weight: 500; margin-top: auto; }
+
+	.error-card { padding: 2rem; }
+	.error-msg { color: var(--color-text-muted); font-size: 0.9rem; font-style: italic; }
+	.error-msg a { color: var(--color-primary); }
+
+	@media (max-width: 900px) {
+		.vvd-header h1 { font-size: 2.5rem; }
+		.vvd-logo-badge { font-size: 1.1rem; }
+		.quick-links-grid { grid-template-columns: 1fr; }
+		.news-grid { grid-template-columns: 1fr; }
+		.news-featured { grid-column: span 1; }
+		.news-header { flex-direction: column; gap: 0.5rem; }
+	}
+</style>
