@@ -49,16 +49,7 @@ try {
 	<header class="vvd-header">
 		<div class="vvd-title-row">
 			<div class="vvd-logo-badge">
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="56" height="56">
-					<!-- Blue shadows -->
-					<polygon fill="#0A2CCA" points="6,8 18,8 44,66 66,8 78,8 42,74 28,74"/>
-					<polygon fill="#0A2CCA" points="62,8 70,8 79,44 88,8 97,8 82,52 74,52"/>
-					<path fill="#0A2CCA" fill-rule="evenodd" d="M6,60 L6,99 L48,99 Q96,99 96,79 Q96,60 48,60 Z M22,71 L22,88 L48,88 Q79,88 79,79 Q79,71 48,71 Z"/>
-					<!-- Orange foreground -->
-					<polygon fill="#FF6400" points="2,4 14,4 40,62 62,4 74,4 38,70 24,70"/>
-					<polygon fill="#FF6400" points="58,4 66,4 75,40 84,4 93,4 78,48 70,48"/>
-					<path fill="#FF6400" fill-rule="evenodd" d="M2,56 L2,95 L44,95 Q92,95 92,75 Q92,56 44,56 Z M18,67 L18,84 L44,84 Q75,84 75,75 Q75,67 44,67 Z"/>
-				</svg>
+				<img src="/vvd-logo.png" alt="VVD logo" class="vvd-logo-img" />
 			</div>
 			<div>
 				<h1 class="serif">VVD <span class="gold-text italic">Hardenberg</span></h1>
@@ -222,7 +213,7 @@ try {
 	.vvd-logo-badge {
 		width: 68px;
 		height: 68px;
-		background: var(--color-card);
+		background: #fff;
 		border: 1px solid var(--color-border);
 		border-radius: 12px;
 		display: flex;
@@ -230,6 +221,12 @@ try {
 		justify-content: center;
 		flex-shrink: 0;
 		padding: 6px;
+		overflow: hidden;
+	}
+	.vvd-logo-img {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
 	}
 
 	.vvd-header h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 0.5rem; }
