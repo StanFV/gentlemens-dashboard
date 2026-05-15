@@ -86,7 +86,11 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 				const missing = DEFAULT_TAB_ORDER.filter(navId => !existing.includes(navId));
 				currentTabOrder = [...existing, ...missing];
 			}
-			renderMobileTabs(currentTabOrder);
+			// Only re-render if the order differs from what was pre-rendered server-side.
+			// Unnecessary re-renders replace innerHTML and cause a layout shift (jump) on navigation.
+			if (currentTabOrder.join(',') !== DEFAULT_TAB_ORDER.join(',')) {
+				renderMobileTabs(currentTabOrder);
+			}
 		}
 	}
 
