@@ -10,16 +10,47 @@ const isActive = (path: string) => {
 	if (path === '/' && pathname !== '/') return false;
 	return pathname.startsWith(path);
 };
+
+// Pre-render default mobile tabs server-side to avoid flash on navigation
+const _svgA = 'xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"';
+const SSR_NAV_ITEMS = [
+	{ id: 'dashboard', label: 'Dashboard', href: '/', icon: `<svg ${_svgA}><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>` },
+	{ id: 'projects', label: 'Projects', href: '/projects', icon: `<svg ${_svgA}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>` },
+	{ id: 'members', label: 'Members', href: '/members', icon: `<svg ${_svgA}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>` },
+	{ id: 'settings', label: 'Settings', href: '/settings', icon: `<svg ${_svgA}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1-2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>` },
+	{ id: 'treasury', label: 'Treasury', href: '#', icon: `<svg ${_svgA}><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>` },
+	{ id: 'status', label: 'Status', href: '/status', icon: `<svg ${_svgA}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>` },
+	{ id: 'feature-checklist', label: 'Checklist', href: '/feature-checklist', icon: `<svg ${_svgA}><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>` },
+];
+const SSR_TAB_COUNT = 4;
+const ssrActiveId = (() => {
+	for (const item of SSR_NAV_ITEMS) {
+		if (item.href === '#') continue;
+		if (item.href === '/' && pathname === '/') return item.id;
+		if (item.href !== '/' && pathname.startsWith(item.href)) return item.id;
+	}
+	return null;
+})();
+const ssrVisibleTabs = SSR_NAV_ITEMS.slice(0, SSR_TAB_COUNT);
+const ssrHiddenTabs = SSR_NAV_ITEMS.slice(SSR_TAB_COUNT);
+const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 ---
 
 <script>
 	import { supabase } from '../lib/supabase';
 
-	// Redirect invite links to the set-password page before Supabase processes the hash
+	// Redirect invite links (implicit flow) before Supabase processes the hash
 	const hashParams = new URLSearchParams(window.location.hash.substring(1));
 	if (hashParams.get('type') === 'invite') {
 		window.location.replace('/set-password' + window.location.hash);
 	}
+
+	// Handle password recovery (PKCE flow): Supabase exchanges the code and fires PASSWORD_RECOVERY
+	supabase.auth.onAuthStateChange((event) => {
+		if (event === 'PASSWORD_RECOVERY') {
+			window.location.replace('/set-password');
+		}
+	});
 
 	// Auth protection
 	supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -439,8 +470,11 @@ const isActive = (path: string) => {
 		renderMobileTabs(currentTabOrder);
 	}
 
-	// Render default tabs immediately so there's no empty state on load
-	if (isMobile()) renderMobileTabs(currentTabOrder);
+	// Wire up the SSR-rendered More button before JS re-renders with user's saved order
+	document.getElementById('mobile-tabs')?.addEventListener('click', (e) => {
+		const btn = (e.target as Element).closest('.more-tab-btn');
+		if (btn) openMorePanel(currentTabOrder.slice(TAB_BAR_COUNT).map(id => ALL_NAV_ITEMS.find(i => i.id === id)!).filter(Boolean));
+	});
 
 	// Handle orientation change / resize
 	window.addEventListener('resize', () => {
@@ -457,7 +491,7 @@ const isActive = (path: string) => {
 <Layout title={title}>
 	<div class="app">
 		<!-- Sidebar -->
-		<aside class="sidebar">
+		<aside class="sidebar mobile-nav-ready">
 			<div class="brand">
 				<div class="logo">G</div>
 				<span class="brand-name serif">Gentlemen</span>
@@ -498,8 +532,21 @@ const isActive = (path: string) => {
 				</a>
 			</nav>
 
-			<!-- Mobile tab bar — populated by JS, shown instead of .nav on mobile -->
-			<div class="mobile-tabs" id="mobile-tabs"></div>
+			<!-- Mobile tab bar — pre-rendered server-side, JS updates with user's custom order -->
+			<div class="mobile-tabs" id="mobile-tabs">
+				{ssrVisibleTabs.map(item => (
+					<a href={item.href} class={`nav-item mobile-tab${item.id === ssrActiveId ? ' active' : ''}`}>
+						<Fragment set:html={item.icon} />
+						<span class="nav-text">{item.label}</span>
+					</a>
+				))}
+				{ssrHiddenTabs.length > 0 && (
+					<button class={`nav-item mobile-tab more-tab-btn${ssrMoreActive ? ' active' : ''}`} id="more-tab-btn">
+						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+						<span class="nav-text">More</span>
+					</button>
+				)}
+			</div>
 
 			<div class="sidebar-bottom">
 				<div class="profile-wrapper">
@@ -856,21 +903,17 @@ const isActive = (path: string) => {
 			background: rgba(10, 9, 8, 0.95); backdrop-filter: blur(10px);
 		}
 
-		/* Hide static nav when JS has rendered mobile tabs */
+		/* Always hide desktop nav on mobile — SSR pre-rendered tabs replace it */
 		.sidebar .nav { display: none; }
-		.sidebar:not(.mobile-nav-ready) .nav { display: flex; flex-direction: row; justify-content: space-around; width: 100%; gap: 0; }
 
 		.brand, .sidebar-bottom { display: none; }
 
-		/* Mobile tabs: JS-rendered, shown only when ready */
+		/* Mobile tabs: always visible on mobile, content pre-rendered server-side */
 		.mobile-tabs {
-			display: none;
-			width: 100%;
-		}
-		.sidebar.mobile-nav-ready .mobile-tabs {
 			display: flex;
 			justify-content: space-around;
 			align-items: center;
+			width: 100%;
 		}
 
 		.nav-item { flex-direction: column; font-size: 0.65rem; padding: 0.5rem; gap: 0.2rem; }
