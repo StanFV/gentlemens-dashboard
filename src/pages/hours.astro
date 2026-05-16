@@ -1,0 +1,629 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<script>
+	import { supabase } from '../lib/supabase';
+
+	// State
+	let currentUserId: string | null = null;
+	let editingEntryId: string | null = null;
+	let allEntries: any[] = [];
+	let projects: any[] = [];
+	let features: any[] = [];
+	let profiles: any[] = [];
+	let hoursModalFeatureId: string | null = null;
+
+	// UI refs
+	const filterUser = document.getElementById('filter-user') as HTMLSelectElement;
+	const filterPeriod = document.getElementById('filter-period') as HTMLSelectElement;
+	const filterProject = document.getElementById('filter-project') as HTMLSelectElement;
+	const filterFeature = document.getElementById('filter-feature') as HTMLSelectElement;
+	const searchInput = document.getElementById('hours-search') as HTMLInputElement;
+	const filtersToggleBtn = document.getElementById('filters-toggle-btn');
+	const filtersPanel = document.getElementById('filters-panel');
+	const filterBadge = document.getElementById('filter-badge');
+	const entriesContainer = document.getElementById('entries-container');
+	const personsSection = document.getElementById('persons-section') as HTMLElement;
+	const singleSection = document.getElementById('single-section') as HTMLElement;
+	const personsContainer = document.getElementById('persons-container');
+	const modal = document.getElementById('hours-modal');
+
+	// Filter panel toggle
+	let filtersOpen = false;
+	filtersToggleBtn?.addEventListener('click', () => {
+		filtersOpen = !filtersOpen;
+		filtersPanel?.classList.toggle('open', filtersOpen);
+		filtersToggleBtn.classList.toggle('active', filtersOpen);
+	});
+
+	function updateFilterBadge() {
+		let count = 0;
+		if (filterUser?.value) count++;
+		if (filterPeriod?.value) count++;
+		if (filterProject?.value) count++;
+		if (filterFeature?.value) count++;
+		if (count > 0) {
+			filterBadge?.classList.remove('hidden');
+			filterBadge!.textContent = String(count);
+		} else {
+			filterBadge?.classList.add('hidden');
+		}
+	}
+
+	[filterUser, filterPeriod, filterProject, filterFeature].forEach(el => {
+		el?.addEventListener('change', () => { updateFilterBadge(); renderEntries(); });
+	});
+	searchInput?.addEventListener('input', renderEntries);
+
+	// Week start (Monday)
+	function getMonday(d: Date): Date {
+		const day = d.getDay();
+		const diff = (day === 0 ? -6 : 1) - day;
+		const mon = new Date(d);
+		mon.setDate(d.getDate() + diff);
+		mon.setHours(0, 0, 0, 0);
+		return mon;
+	}
+
+	function getFilteredEntries() {
+		const q = searchInput?.value.toLowerCase() || '';
+		const uid = filterUser?.value || '';
+		const period = filterPeriod?.value || '';
+		const pid = filterProject?.value || '';
+		const fid = filterFeature?.value || '';
+
+		return allEntries.filter(e => {
+			if (uid && e.user_id !== uid) return false;
+			if (pid && e.project_id !== pid) return false;
+			if (fid && e.feature_id !== fid) return false;
+			if (period) {
+				const entryDate = new Date(e.date);
+				const now = new Date();
+				if (period === 'week') {
+					if (entryDate < getMonday(now)) return false;
+				} else if (period === 'month') {
+					const start = new Date(now.getFullYear(), now.getMonth(), 1);
+					if (entryDate < start) return false;
+				} else if (period === 'year') {
+					const start = new Date(now.getFullYear(), 0, 1);
+					if (entryDate < start) return false;
+				}
+			}
+			if (q) {
+				const profile = e.profiles;
+				const name = profile?.full_name || profile?.username || '';
+				const desc = e.description || '';
+				if (!name.toLowerCase().includes(q) && !desc.toLowerCase().includes(q)) return false;
+			}
+			return true;
+		});
+	}
+
+	function renderEntries() {
+		if (!entriesContainer) return;
+		const filtered = getFilteredEntries();
+
+		if (filtered.length === 0) {
+			entriesContainer.innerHTML = `<div class="empty-state card"><p>${allEntries.length === 0 ? 'No hours registered yet.' : 'No entries match your filters.'}</p></div>`;
+			updateStats(filtered);
+			return;
+		}
+
+		// Group by date
+		const groups: Record<string, any[]> = {};
+		for (const e of filtered) {
+			const key = e.date || 'Unknown';
+			if (!groups[key]) groups[key] = [];
+			groups[key].push(e);
+		}
+		const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+		entriesContainer.innerHTML = sortedDates.map(date => {
+			const dayEntries = groups[date];
+			const dayTotal = dayEntries.reduce((s, e) => s + (e.hours || 0), 0);
+
+			const rows = dayEntries.map(e => {
+				const profile = e.profiles;
+				const name = profile?.full_name || profile?.username || 'Unknown';
+				const avatar = profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+				const proj = projects.find(p => p.id === e.project_id);
+				const feat = features.find(f => f.id === e.feature_id);
+				return `
+					<div class="entry-row">
+						<div class="entry-person">
+							<img src="${avatar}" class="entry-avatar" />
+							<span>${name}</span>
+						</div>
+						<div class="entry-tags">
+							${proj ? `<span class="tag-project">${proj.title}</span>` : ''}
+							${feat ? `<span class="tag-feature">${feat.title}</span>` : ''}
+							${e.description ? `<span class="entry-desc">${e.description}</span>` : ''}
+						</div>
+						<span class="entry-hours">${e.hours}h</span>
+						<div class="entry-actions">
+							<button class="btn-icon edit-entry-btn" data-id="${e.id}" title="Edit">
+								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+							</button>
+							<button class="btn-icon delete-entry-btn" data-id="${e.id}" title="Delete">
+								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H5c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+							</button>
+						</div>
+					</div>
+				`;
+			}).join('');
+
+			return `
+				<div class="day-group card">
+					<div class="day-header">
+						<span class="day-date">${new Date(date + 'T12:00:00').toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+						<span class="day-total">${dayTotal}h</span>
+					</div>
+					<div class="day-entries">${rows}</div>
+				</div>
+			`;
+		}).join('');
+
+		updateStats(filtered);
+		setupEntryButtons();
+	}
+
+	function updateStats(filtered: any[]) {
+		const now = new Date();
+		const weekStart = getMonday(now);
+		const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+		const weekTotal = filtered.filter(e => new Date(e.date) >= weekStart).reduce((s, e) => s + (e.hours || 0), 0);
+		const monthTotal = filtered.filter(e => new Date(e.date) >= monthStart).reduce((s, e) => s + (e.hours || 0), 0);
+		const allTotal = allEntries.reduce((s, e) => s + (e.hours || 0), 0);
+
+		const weekEl = document.getElementById('stat-week');
+		const monthEl = document.getElementById('stat-month');
+		const totalEl = document.getElementById('stat-total');
+		if (weekEl) weekEl.textContent = `${weekTotal}h`;
+		if (monthEl) monthEl.textContent = `${monthTotal}h`;
+		if (totalEl) totalEl.textContent = `${allTotal}h`;
+	}
+
+	function setupEntryButtons() {
+		document.querySelectorAll('.edit-entry-btn').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				const id = (e.currentTarget as HTMLElement).dataset.id;
+				if (id) openEditModal(id);
+			});
+		});
+		document.querySelectorAll('.delete-entry-btn').forEach(btn => {
+			btn.addEventListener('click', async (e) => {
+				const id = (e.currentTarget as HTMLElement).dataset.id;
+				if (id && confirm('Delete this time entry?')) {
+					const { error } = await supabase.from('time_entries').delete().eq('id', id);
+					if (error) alert(error.message);
+					else loadEntries();
+				}
+			});
+		});
+	}
+
+	async function openEditModal(entryId: string) {
+		editingEntryId = entryId;
+		const entry = allEntries.find(e => e.id === entryId);
+		if (!entry) return;
+
+		const modalTitle = document.getElementById('modal-title');
+		if (modalTitle) modalTitle.textContent = 'Edit Entry';
+
+		// Show single-person section, hide multi-person
+		personsSection.style.display = 'none';
+		singleSection.style.display = 'block';
+
+		const nameEl = document.getElementById('single-person-name');
+		const profile = entry.profiles;
+		if (nameEl) nameEl.textContent = profile?.full_name || profile?.username || 'Unknown';
+
+		(document.getElementById('edit-hours') as HTMLInputElement).value = entry.hours;
+		(document.getElementById('modal-date') as HTMLInputElement).value = entry.date || '';
+		(document.getElementById('modal-desc') as HTMLInputElement).value = entry.description || '';
+		(document.getElementById('modal-project') as HTMLSelectElement).value = entry.project_id || '';
+		(document.getElementById('modal-feature') as HTMLSelectElement).value = entry.feature_id || '';
+
+		modal?.classList.add('active');
+	}
+
+	function openNewModal() {
+		editingEntryId = null;
+		const modalTitle = document.getElementById('modal-title');
+		if (modalTitle) modalTitle.textContent = 'Log Hours';
+
+		personsSection.style.display = 'block';
+		singleSection.style.display = 'none';
+
+		(document.getElementById('modal-date') as HTMLInputElement).value = new Date().toISOString().split('T')[0];
+		(document.getElementById('modal-desc') as HTMLInputElement).value = '';
+		(document.getElementById('modal-project') as HTMLSelectElement).value = '';
+		(document.getElementById('modal-feature') as HTMLSelectElement).value = '';
+
+		resetPersonRows();
+		modal?.classList.add('active');
+	}
+
+	function closeModal() {
+		modal?.classList.remove('active');
+		editingEntryId = null;
+	}
+
+	document.getElementById('new-entry-btn')?.addEventListener('click', openNewModal);
+	document.getElementById('modal-cancel-btn')?.addEventListener('click', closeModal);
+
+	// Multi-person rows
+	function buildPersonRow() {
+		const opts = profiles.map(p => `<option value="${p.id}">${p.full_name || p.username}</option>`).join('');
+		return `
+			<div class="person-row">
+				<select class="person-select form-ctrl-sel">${opts}</select>
+				<input type="number" class="hours-input form-ctrl-num" placeholder="Uren" min="0.5" step="0.5" />
+				<button type="button" class="remove-row-btn btn-icon" title="Verwijder">×</button>
+			</div>
+		`;
+	}
+
+	function resetPersonRows() {
+		if (!personsContainer) return;
+		personsContainer.innerHTML = buildPersonRow();
+		setupRemoveBtns();
+	}
+
+	function setupRemoveBtns() {
+		document.querySelectorAll('.remove-row-btn').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				const row = (e.currentTarget as HTMLElement).closest('.person-row');
+				if (personsContainer && personsContainer.querySelectorAll('.person-row').length > 1) row?.remove();
+			});
+		});
+	}
+
+	document.getElementById('add-person-btn')?.addEventListener('click', () => {
+		if (!personsContainer) return;
+		const tmp = document.createElement('div');
+		tmp.innerHTML = buildPersonRow();
+		personsContainer.appendChild(tmp.firstElementChild!);
+		setupRemoveBtns();
+	});
+
+	document.getElementById('modal-save-btn')?.addEventListener('click', async () => {
+		const date = (document.getElementById('modal-date') as HTMLInputElement)?.value || '';
+		const description = (document.getElementById('modal-desc') as HTMLInputElement)?.value || '';
+		const projectId = (document.getElementById('modal-project') as HTMLSelectElement)?.value || null;
+		const featureId = (document.getElementById('modal-feature') as HTMLSelectElement)?.value || null;
+		const { data: { session } } = await supabase.auth.getSession();
+
+		if (editingEntryId) {
+			const hours = parseFloat((document.getElementById('edit-hours') as HTMLInputElement)?.value || '0');
+			const { error } = await supabase.from('time_entries').update({
+				hours, date, description,
+				project_id: projectId || null,
+				feature_id: featureId || null
+			}).eq('id', editingEntryId);
+			if (error) alert(error.message);
+			else { closeModal(); loadEntries(); }
+		} else {
+			const rows = personsContainer?.querySelectorAll('.person-row') || [];
+			const inserts: any[] = [];
+			rows.forEach(row => {
+				const userId = (row.querySelector('.person-select') as HTMLSelectElement)?.value;
+				const hours = parseFloat((row.querySelector('.hours-input') as HTMLInputElement)?.value || '0');
+				if (userId && hours > 0) {
+					inserts.push({
+						user_id: userId, hours, date, description,
+						project_id: projectId || null,
+						feature_id: featureId || null,
+						logged_by: session?.user.id
+					});
+				}
+			});
+			if (inserts.length === 0) { alert('Voer minimaal één geldige invoer in.'); return; }
+			const { error } = await supabase.from('time_entries').insert(inserts);
+			if (error) alert(error.message);
+			else {
+				closeModal();
+				await supabase.from('notifications').insert({
+					user_id: session?.user.id,
+					type: 'hours_logged',
+					title: 'Uren Geregistreerd',
+					content: `${inserts.reduce((s, i) => s + i.hours, 0)} uren geregistreerd.`,
+					link: '/hours'
+				});
+				loadEntries();
+			}
+		}
+	});
+
+	function populateUserFilter() {
+		if (!filterUser) return;
+		filterUser.innerHTML = '<option value="">Iedereen</option>';
+		profiles.forEach(p => {
+			const opt = document.createElement('option');
+			opt.value = p.id;
+			opt.textContent = p.full_name || p.username;
+			filterUser.appendChild(opt);
+		});
+	}
+
+	async function loadProjects() {
+		const { data } = await supabase.from('projects').select('id, title').order('title');
+		projects = data || [];
+		const sel = document.getElementById('modal-project') as HTMLSelectElement;
+		const filterSel = document.getElementById('filter-project') as HTMLSelectElement;
+		const opts = projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+		if (sel) sel.innerHTML = `<option value="">Geen project</option>${opts}`;
+		if (filterSel) filterSel.innerHTML = `<option value="">Alle projecten</option>${opts}`;
+	}
+
+	async function loadFeatures() {
+		const { data } = await supabase.from('feature_requests').select('id, title').order('title');
+		features = data || [];
+		const sel = document.getElementById('modal-feature') as HTMLSelectElement;
+		const filterSel = document.getElementById('filter-feature') as HTMLSelectElement;
+		const opts = features.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
+		if (sel) sel.innerHTML = `<option value="">Geen feature</option>${opts}`;
+		if (filterSel) filterSel.innerHTML = `<option value="">Alle features</option>${opts}`;
+	}
+
+	async function loadProfiles() {
+		const { data } = await supabase.from('profiles').select('id, full_name, username, avatar_url').order('full_name');
+		profiles = data || [];
+		populateUserFilter();
+	}
+
+	async function loadEntries() {
+		if (entriesContainer) entriesContainer.innerHTML = '<div class="loading-state card"><p>Loading entries...</p></div>';
+		const { data, error } = await supabase
+			.from('time_entries')
+			.select('*, profiles!time_entries_profile_fkey(full_name, username, avatar_url)')
+			.order('date', { ascending: false })
+			.order('created_at', { ascending: false });
+
+		if (error) {
+			if (entriesContainer) entriesContainer.innerHTML = `<div class="empty-state card"><p>Error: ${error.message}</p></div>`;
+			return;
+		}
+		allEntries = data || [];
+		renderEntries();
+	}
+
+	async function init() {
+		const { data: { session } } = await supabase.auth.getSession();
+		currentUserId = session?.user.id || null;
+		await Promise.all([loadProjects(), loadFeatures(), loadProfiles()]);
+		await loadEntries();
+	}
+
+	init();
+</script>
+
+<AppLayout title="Hours | Gentlemen's Dashboard">
+	<header class="page-header">
+		<div>
+			<h1 class="serif">Uren <span class="gold-text italic">Registratie</span></h1>
+			<p class="subtitle">Overzicht van alle gewerkte uren per persoon, project en feature.</p>
+		</div>
+		<button id="new-entry-btn" class="btn-primary">+ Uren Toevoegen</button>
+	</header>
+
+	<!-- Stats -->
+	<div class="stats-row">
+		<div class="stat-card card">
+			<span class="stat-label">Deze Week</span>
+			<span id="stat-week" class="stat-value">0h</span>
+		</div>
+		<div class="stat-card card">
+			<span class="stat-label">Deze Maand</span>
+			<span id="stat-month" class="stat-value">0h</span>
+		</div>
+		<div class="stat-card card">
+			<span class="stat-label">Totaal Aller Tijden</span>
+			<span id="stat-total" class="stat-value">0h</span>
+		</div>
+	</div>
+
+	<!-- Filters -->
+	<div class="list-filters card">
+		<div class="filters-top">
+			<div class="search-wrap">
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+				<input type="text" id="hours-search" placeholder="Zoek op naam of omschrijving..." />
+			</div>
+			<button class="filters-toggle-btn" id="filters-toggle-btn">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y2="6"/><line x1="8" x2="16" y1="12" y2="12"/><line x1="12" x2="12" y1="18" y2="18"/></svg>
+				Filters
+				<span id="filter-badge" class="filter-badge hidden">0</span>
+			</button>
+		</div>
+		<div class="filters-panel" id="filters-panel">
+			<div class="filters-panel-inner">
+				<div class="filter-row">
+					<div class="filter-control">
+						<label class="filter-label">Persoon</label>
+						<select id="filter-user" class="filter-select">
+							<option value="">Iedereen</option>
+						</select>
+					</div>
+					<div class="filter-control">
+						<label class="filter-label">Periode</label>
+						<select id="filter-period" class="filter-select">
+							<option value="">Alle tijd</option>
+							<option value="week">Deze week</option>
+							<option value="month">Deze maand</option>
+							<option value="year">Dit jaar</option>
+						</select>
+					</div>
+					<div class="filter-control">
+						<label class="filter-label">Project</label>
+						<select id="filter-project" class="filter-select">
+							<option value="">Alle projecten</option>
+						</select>
+					</div>
+					<div class="filter-control">
+						<label class="filter-label">Feature</label>
+						<select id="filter-feature" class="filter-select">
+							<option value="">Alle features</option>
+						</select>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Entries -->
+	<div id="entries-container">
+		<div class="loading-state card"><p>Loading entries...</p></div>
+	</div>
+
+	<!-- Modal -->
+	<div id="hours-modal" class="modal-overlay">
+		<div class="modal-card card">
+			<h2 id="modal-title" class="serif">Log Hours</h2>
+
+			<div class="form-row">
+				<div class="form-group">
+					<label>Datum *</label>
+					<input type="date" id="modal-date" />
+				</div>
+				<div class="form-group">
+					<label>Project</label>
+					<select id="modal-project">
+						<option value="">Geen project</option>
+					</select>
+				</div>
+			</div>
+			<div class="form-group">
+				<label>Feature</label>
+				<select id="modal-feature">
+					<option value="">Geen feature</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>Omschrijving</label>
+				<input type="text" id="modal-desc" placeholder="Wat is er gedaan?" />
+			</div>
+
+			<!-- New entry: multi-person -->
+			<div id="persons-section">
+				<label class="form-label-sm">Personen & Uren</label>
+				<div id="persons-container" class="persons-rows"></div>
+				<button type="button" id="add-person-btn" class="add-person-btn">+ Persoon toevoegen</button>
+			</div>
+
+			<!-- Edit entry: single person -->
+			<div id="single-section" style="display:none">
+				<div class="form-group">
+					<label>Persoon</label>
+					<div id="single-person-name" class="single-person-display"></div>
+				</div>
+				<div class="form-group">
+					<label>Uren *</label>
+					<input type="number" id="edit-hours" min="0.5" step="0.5" placeholder="0" />
+				</div>
+			</div>
+
+			<div class="modal-actions">
+				<button type="button" id="modal-cancel-btn" class="btn-secondary">Annuleren</button>
+				<button type="button" id="modal-save-btn" class="btn-primary">Opslaan</button>
+			</div>
+		</div>
+	</div>
+</AppLayout>
+
+<style is:global>
+	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; }
+	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
+	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
+
+	/* Stats */
+	.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
+	.stat-card { padding: 1.5rem 2rem; display: flex; flex-direction: column; gap: 0.5rem; }
+	.stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
+	.stat-value { font-size: 2.2rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-serif); }
+
+	/* Filters */
+	.list-filters { padding: 1rem 1.25rem; margin-bottom: 2rem; display: flex; flex-direction: column; gap: 0.75rem; }
+	.filters-top { display: flex; align-items: center; gap: 0.75rem; }
+	.search-wrap { display: flex; align-items: center; gap: 0.6rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.6rem 1rem; flex: 1; }
+	.search-wrap svg { opacity: 0.4; flex-shrink: 0; }
+	.search-wrap input { background: transparent; border: none; outline: none; color: var(--color-text); font-size: 0.9rem; font-family: inherit; width: 100%; }
+	.search-wrap input::placeholder { color: var(--color-text-muted); }
+
+	.filters-toggle-btn { display: flex; align-items: center; gap: 0.4rem; background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem 1rem; border-radius: 100px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; font-family: inherit; white-space: nowrap; }
+	.filters-toggle-btn:hover, .filters-toggle-btn.active { border-color: var(--color-primary); color: var(--color-primary); }
+
+	.filter-badge { background: var(--color-primary); color: var(--color-bg); font-size: 0.6rem; font-weight: 700; min-width: 16px; height: 16px; border-radius: 100px; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; }
+	.filter-badge.hidden { display: none; }
+
+	.filters-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
+	.filters-panel.open { grid-template-rows: 1fr; }
+	.filters-panel-inner { overflow: hidden; }
+	.filter-row { display: flex; gap: 1.5rem; flex-wrap: wrap; padding-top: 0.75rem; border-top: 1px solid var(--color-border); margin-top: 0.25rem; }
+	.filter-control { display: flex; flex-direction: column; gap: 0.4rem; }
+	.filter-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); font-weight: 700; }
+	.filter-select { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 0.85rem; color: var(--color-text); font-family: inherit; font-size: 0.85rem; outline: none; cursor: pointer; }
+	.filter-select:focus { border-color: var(--color-primary); }
+
+	/* Day groups */
+	.day-group { margin-bottom: 1.5rem; overflow: hidden; }
+	.day-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+	.day-date { font-size: 0.85rem; font-weight: 600; text-transform: capitalize; }
+	.day-total { font-size: 0.85rem; font-weight: 700; color: var(--color-primary); }
+	.day-entries { display: flex; flex-direction: column; }
+
+	.entry-row { display: grid; grid-template-columns: 180px 1fr 60px 80px; gap: 1rem; align-items: center; padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--color-border); transition: background 0.2s; }
+	.entry-row:last-child { border-bottom: none; }
+	.entry-row:hover { background: rgba(197,160,89,0.03); }
+
+	.entry-person { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; font-weight: 500; }
+	.entry-avatar { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--color-primary); object-fit: cover; flex-shrink: 0; }
+	.entry-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+	.tag-project { font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 100px; background: rgba(37,99,235,0.15); color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em; }
+	.tag-feature { font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 100px; background: rgba(139,92,246,0.15); color: #a78bfa; text-transform: uppercase; letter-spacing: 0.05em; }
+	.entry-desc { font-size: 0.8rem; color: var(--color-text-muted); }
+	.entry-hours { font-size: 0.9rem; font-weight: 700; color: var(--color-primary); text-align: right; }
+	.entry-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+
+	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
+	.delete-entry-btn:hover { border-color: #fecaca; color: #fecaca; }
+
+	.loading-state, .empty-state { padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
+
+	/* Modal */
+	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
+	.modal-overlay.active { display: flex; }
+	.modal-card { width: 100%; max-width: 540px; padding: 3rem; max-height: 90vh; overflow-y: auto; }
+
+	.form-group { margin-bottom: 1.25rem; }
+	.form-group label, .form-label-sm { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.5rem; letter-spacing: 0.1em; font-weight: 700; }
+	.form-group input, .form-group select, .form-group textarea { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem 1rem; color: var(--color-text); font-family: inherit; outline: none; transition: border-color 0.2s; font-size: 0.9rem; }
+	.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--color-primary); }
+	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+
+	.persons-rows { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.6rem; }
+	.person-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem; align-items: center; }
+	.form-ctrl-sel { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.65rem 0.85rem; color: var(--color-text); font-family: inherit; font-size: 0.9rem; outline: none; width: 100%; }
+	.form-ctrl-num { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.65rem 0.85rem; color: var(--color-text); font-family: inherit; font-size: 0.9rem; outline: none; width: 80px; }
+	.form-ctrl-sel:focus, .form-ctrl-num:focus { border-color: var(--color-primary); }
+	.add-person-btn { background: transparent; border: 1px dashed var(--color-border); color: var(--color-text-muted); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit; width: 100%; transition: all 0.2s; margin-bottom: 1rem; }
+	.add-person-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+	.single-person-display { font-size: 0.95rem; font-weight: 500; padding: 0.5rem 0; color: var(--color-text); }
+
+	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+
+	@media (max-width: 900px) {
+		.stats-row { grid-template-columns: 1fr 1fr; }
+		.entry-row { grid-template-columns: 1fr auto auto; grid-template-rows: auto auto; }
+		.entry-tags { grid-column: 1 / -1; }
+		.filters-top { flex-wrap: wrap; }
+		.form-row { grid-template-columns: 1fr; }
+		.page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+	}
+	@media (max-width: 600px) {
+		.stats-row { grid-template-columns: 1fr; }
+	}
+</style>

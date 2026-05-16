@@ -7,6 +7,11 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	// State
 	let editingProjectId: string | null = null;
+	let allProjects: any[] = [];
+	let profiles: any[] = [];
+	let searchQuery = '';
+	let drawerProjectId: string | null = null;
+	let hoursModalProjectId: string | null = null;
 
 	// UI Elements
 	const createBtn = document.getElementById('create-project-btn');
@@ -16,6 +21,12 @@ import AppLayout from '../layouts/AppLayout.astro';
 	const cancelBtn = document.getElementById('cancel-btn');
 	const projectForm = document.getElementById('project-form') as HTMLFormElement;
 	const container = document.getElementById('projects-container');
+	const searchInput = document.getElementById('project-search') as HTMLInputElement;
+
+	searchInput?.addEventListener('input', () => {
+		searchQuery = searchInput.value.toLowerCase();
+		renderProjects();
+	});
 
 	// Toggle Modal
 	function openModal(editId: string | null = null) {
@@ -42,7 +53,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 	cancelBtn?.addEventListener('click', closeModal);
 
 	async function loadProjectIntoForm(id: string) {
-		const { data, error } = await supabase.from('projects').select('*').eq('id', id).single();
+		const { data } = await supabase.from('projects').select('*').eq('id', id).single();
 		if (data) {
 			(document.getElementById('title') as HTMLInputElement).value = data.title;
 			(document.getElementById('client') as HTMLInputElement).value = data.client || '';
@@ -66,12 +77,24 @@ import AppLayout from '../layouts/AppLayout.astro';
 			return;
 		}
 
-		if (!projects || projects.length === 0) {
-			container.innerHTML = `<div class="empty-state card"><p>No projects found. Time to start something grand.</p></div>`;
+		allProjects = projects || [];
+		renderProjects();
+	}
+
+	function renderProjects() {
+		if (!container) return;
+		const filtered = allProjects.filter(p =>
+			!searchQuery ||
+			(p.title || '').toLowerCase().includes(searchQuery) ||
+			(p.client || '').toLowerCase().includes(searchQuery)
+		);
+
+		if (filtered.length === 0) {
+			container.innerHTML = `<div class="empty-state card"><p>${allProjects.length === 0 ? 'No projects found. Time to start something grand.' : 'No projects match your search.'}</p></div>`;
 			return;
 		}
 
-		container.innerHTML = projects.map(project => `
+		container.innerHTML = filtered.map(project => `
 			<div class="project-card card" data-id="${project.id}">
 				<div class="p-header">
 					<div class="p-main-info">
@@ -80,6 +103,12 @@ import AppLayout from '../layouts/AppLayout.astro';
 						<p class="p-client">Client: <span>${project.client || 'Internal'}</span></p>
 					</div>
 					<div class="p-actions">
+						<button class="btn-icon view-hours-project" title="View Hours">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+						</button>
+						<button class="btn-icon log-hours-project" title="Log Hours">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+						</button>
 						<button class="btn-icon edit-project" title="Edit">
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
 						</button>
@@ -115,7 +144,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 			</div>
 		`).join('');
 
-		// Re-attach event listeners
 		setupActionButtons();
 	}
 
@@ -137,14 +165,216 @@ import AppLayout from '../layouts/AppLayout.astro';
 				}
 			});
 		});
+
+		document.querySelectorAll('.view-hours-project').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				const card = (e.currentTarget as HTMLElement).closest('.project-card');
+				const id = card?.getAttribute('data-id');
+				const title = card?.querySelector('h2')?.textContent || '';
+				if (id) openProjectHoursDrawer(id, title);
+			});
+		});
+
+		document.querySelectorAll('.log-hours-project').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				const card = (e.currentTarget as HTMLElement).closest('.project-card');
+				const id = card?.getAttribute('data-id');
+				const title = card?.querySelector('h2')?.textContent || '';
+				if (id) openHoursModal(id, title);
+			});
+		});
 	}
+
+	// Hours Drawer
+	async function openProjectHoursDrawer(projectId: string, projectTitle: string) {
+		drawerProjectId = projectId;
+		const drawer = document.getElementById('project-hours-drawer');
+		const overlay = document.getElementById('drawer-overlay');
+		const drawerTitleEl = document.getElementById('drawer-project-title');
+		const drawerBody = document.getElementById('drawer-body');
+
+		if (drawerTitleEl) drawerTitleEl.textContent = projectTitle;
+		if (drawerBody) drawerBody.innerHTML = '<p style="color:var(--color-text-muted);font-style:italic;padding:1rem 0">Loading...</p>';
+		drawer?.classList.add('active');
+		overlay?.classList.add('active');
+
+		const { data: entries, error } = await supabase
+			.from('time_entries')
+			.select('*, profiles!time_entries_profile_fkey(full_name, username, avatar_url)')
+			.eq('project_id', projectId)
+			.order('date', { ascending: false });
+
+		if (error || !entries) {
+			if (drawerBody) drawerBody.innerHTML = `<p style="color:var(--color-text-muted)">Error loading hours.</p>`;
+			return;
+		}
+
+		const total = entries.reduce((sum, e) => sum + (e.hours || 0), 0);
+
+		const personMap: Record<string, { name: string; avatar: string; hours: number }> = {};
+		for (const e of entries) {
+			const profile = e.profiles;
+			const name = profile?.full_name || profile?.username || 'Unknown';
+			const avatar = profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+			if (!personMap[name]) personMap[name] = { name, avatar, hours: 0 };
+			personMap[name].hours += e.hours || 0;
+		}
+		const persons = Object.values(personMap).sort((a, b) => b.hours - a.hours);
+		const maxHours = persons[0]?.hours || 1;
+
+		const personsHTML = persons.map(p => `
+			<div class="drawer-person">
+				<img src="${p.avatar}" class="drawer-avatar" />
+				<div class="drawer-person-info">
+					<span class="drawer-person-name">${p.name}</span>
+					<div class="drawer-bar-wrap">
+						<div class="drawer-bar" style="width:${Math.round((p.hours / maxHours) * 100)}%"></div>
+					</div>
+				</div>
+				<span class="drawer-person-hours">${p.hours}h</span>
+			</div>
+		`).join('');
+
+		const timelineHTML = entries.map(e => {
+			const profile = e.profiles;
+			const name = profile?.full_name || profile?.username || 'Unknown';
+			return `
+				<div class="drawer-entry">
+					<span class="drawer-entry-date">${e.date || ''}</span>
+					<span class="drawer-entry-name">${name}</span>
+					<span class="drawer-entry-hours">${e.hours}h</span>
+					${e.description ? `<span class="drawer-entry-desc">${e.description}</span>` : ''}
+				</div>
+			`;
+		}).join('');
+
+		if (drawerBody) drawerBody.innerHTML = `
+			<div class="drawer-total">
+				<span class="drawer-total-label">Total Hours</span>
+				<span class="drawer-total-value">${total}h</span>
+			</div>
+			${persons.length > 0 ? `
+				<p class="drawer-section-label">Per Person</p>
+				<div class="drawer-persons">${personsHTML}</div>
+			` : ''}
+			${entries.length > 0 ? `
+				<p class="drawer-section-label">Timeline</p>
+				<div class="drawer-timeline">${timelineHTML}</div>
+			` : '<p style="color:var(--color-text-muted);font-style:italic;margin-top:1rem">No hours logged yet.</p>'}
+			<button class="drawer-log-btn btn-primary" id="drawer-log-hours-btn">+ Uren toevoegen</button>
+		`;
+
+		document.getElementById('drawer-log-hours-btn')?.addEventListener('click', () => {
+			closeDrawer();
+			const project = allProjects.find(p => p.id === projectId);
+			openHoursModal(projectId, project?.title || '');
+		});
+	}
+
+	function closeDrawer() {
+		document.getElementById('project-hours-drawer')?.classList.remove('active');
+		document.getElementById('drawer-overlay')?.classList.remove('active');
+		drawerProjectId = null;
+	}
+
+	document.getElementById('drawer-close-btn')?.addEventListener('click', closeDrawer);
+	document.getElementById('drawer-overlay')?.addEventListener('click', closeDrawer);
+
+	// Hours Modal (multi-person)
+	function openHoursModal(projectId: string, projectTitle: string) {
+		hoursModalProjectId = projectId;
+		const modal = document.getElementById('hours-modal');
+		const titleEl = document.getElementById('hours-modal-title');
+		if (titleEl) titleEl.textContent = `Log Hours — ${projectTitle}`;
+		const dateEl = document.getElementById('hours-date') as HTMLInputElement;
+		if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+		const descEl = document.getElementById('hours-desc') as HTMLInputElement;
+		if (descEl) descEl.value = '';
+		resetPersonRows();
+		modal?.classList.add('active');
+	}
+
+	function closeHoursModal() {
+		document.getElementById('hours-modal')?.classList.remove('active');
+		hoursModalProjectId = null;
+	}
+
+	document.getElementById('hours-cancel-btn')?.addEventListener('click', closeHoursModal);
+
+	function buildPersonRow() {
+		const opts = profiles.map(p => `<option value="${p.id}">${p.full_name || p.username}</option>`).join('');
+		return `
+			<div class="person-row">
+				<select class="person-select form-ctrl">${opts}</select>
+				<input type="number" class="hours-input form-ctrl" placeholder="Uren" min="0.5" step="0.5" />
+				<button type="button" class="remove-row-btn btn-icon" title="Remove">×</button>
+			</div>
+		`;
+	}
+
+	function resetPersonRows() {
+		const rowsEl = document.getElementById('persons-rows');
+		if (!rowsEl) return;
+		rowsEl.innerHTML = buildPersonRow();
+		setupRemoveBtns();
+	}
+
+	function setupRemoveBtns() {
+		document.querySelectorAll('.remove-row-btn').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				const row = (e.currentTarget as HTMLElement).closest('.person-row');
+				const rowsEl = document.getElementById('persons-rows');
+				if (rowsEl && rowsEl.querySelectorAll('.person-row').length > 1) row?.remove();
+			});
+		});
+	}
+
+	document.getElementById('add-person-btn')?.addEventListener('click', () => {
+		const rowsEl = document.getElementById('persons-rows');
+		if (!rowsEl) return;
+		const tmp = document.createElement('div');
+		tmp.innerHTML = buildPersonRow();
+		rowsEl.appendChild(tmp.firstElementChild!);
+		setupRemoveBtns();
+	});
+
+	document.getElementById('hours-submit-btn')?.addEventListener('click', async () => {
+		if (!hoursModalProjectId) return;
+		const rows = document.querySelectorAll('#persons-rows .person-row');
+		const date = (document.getElementById('hours-date') as HTMLInputElement)?.value || new Date().toISOString().split('T')[0];
+		const description = (document.getElementById('hours-desc') as HTMLInputElement)?.value || '';
+		const { data: { session } } = await supabase.auth.getSession();
+
+		const inserts: any[] = [];
+		rows.forEach(row => {
+			const userId = (row.querySelector('.person-select') as HTMLSelectElement)?.value;
+			const hours = parseFloat((row.querySelector('.hours-input') as HTMLInputElement)?.value || '0');
+			if (userId && hours > 0) {
+				inserts.push({ user_id: userId, project_id: hoursModalProjectId, hours, date, description, logged_by: session?.user.id });
+			}
+		});
+
+		if (inserts.length === 0) { alert('Voer minimaal één geldige invoer in.'); return; }
+		const { error } = await supabase.from('time_entries').insert(inserts);
+		if (error) alert(error.message);
+		else {
+			closeHoursModal();
+			await supabase.from('notifications').insert({
+				user_id: session?.user.id,
+				type: 'hours_logged',
+				title: 'Uren Geregistreerd',
+				content: `${inserts.reduce((s, i) => s + i.hours, 0)} uren geregistreerd voor project.`,
+				link: '/projects'
+			});
+		}
+	});
 
 	// Form Submission (Create or Update)
 	projectForm?.addEventListener('submit', async (e) => {
 		e.preventDefault();
 		const formData = new FormData(projectForm);
 		const { data: { session } } = await supabase.auth.getSession();
-		
+
 		const projectData = {
 			title: formData.get('title'),
 			client: formData.get('client'),
@@ -157,7 +387,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 		let result;
 		if (editingProjectId) {
 			result = await supabase.from('projects').update(projectData).eq('id', editingProjectId);
-			
 			if (!result.error) {
 				await supabase.from('notifications').insert({
 					user_id: session?.user.id,
@@ -169,7 +398,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 			}
 		} else {
 			result = await supabase.from('projects').insert([projectData]);
-			
 			if (!result.error) {
 				await supabase.from('notifications').insert({
 					user_id: session?.user.id,
@@ -188,8 +416,13 @@ import AppLayout from '../layouts/AppLayout.astro';
 		}
 	});
 
+	async function loadProfiles() {
+		const { data } = await supabase.from('profiles').select('id, full_name, username');
+		profiles = data || [];
+	}
+
 	// Initial load
-	loadProjects();
+	loadProfiles().then(() => loadProjects());
 </script>
 
 <AppLayout title="Projects | Gentlemen's Dashboard">
@@ -201,13 +434,20 @@ import AppLayout from '../layouts/AppLayout.astro';
 		<button id="create-project-btn" class="btn-primary">+ Initiate New Project</button>
 	</header>
 
+	<div class="list-filters card">
+		<div class="search-wrap">
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+			<input type="text" id="project-search" placeholder="Search projects..." />
+		</div>
+	</div>
+
 	<div id="projects-container" class="projects-grid">
 		<div class="empty-state card">
 			<p>Loading the projects vault...</p>
 		</div>
 	</div>
 
-	<!-- Modal -->
+	<!-- Project Modal -->
 	<div id="project-modal" class="modal-overlay">
 		<div class="modal-card card">
 			<h2 id="modal-title" class="serif">New <span class="gold-text">Project</span></h2>
@@ -234,12 +474,44 @@ import AppLayout from '../layouts/AppLayout.astro';
 					<label for="files_url">Storage URL</label>
 					<input type="url" id="files_url" name="files_url" placeholder="https://..." />
 				</div>
-				
 				<div class="modal-actions">
 					<button type="button" id="cancel-btn" class="btn-secondary">Cancel</button>
 					<button type="submit" id="submit-btn" class="btn-primary">Initiate Project</button>
 				</div>
 			</form>
+		</div>
+	</div>
+
+	<!-- Hours Modal -->
+	<div id="hours-modal" class="modal-overlay">
+		<div class="modal-card card">
+			<h2 id="hours-modal-title" class="serif">Log Hours</h2>
+			<div class="form-group">
+				<label>Datum</label>
+				<input type="date" id="hours-date" class="form-ctrl" style="width:100%;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:.75rem 1rem;color:var(--color-text);outline:none;" />
+			</div>
+			<div class="form-group">
+				<label>Omschrijving</label>
+				<input type="text" id="hours-desc" class="form-ctrl" placeholder="Wat is er gedaan?" style="width:100%;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:.75rem 1rem;color:var(--color-text);font-family:inherit;outline:none;" />
+			</div>
+			<div id="persons-rows" class="persons-rows"></div>
+			<button type="button" id="add-person-btn" class="add-person-btn">+ Persoon toevoegen</button>
+			<div class="modal-actions">
+				<button type="button" id="hours-cancel-btn" class="btn-secondary">Annuleren</button>
+				<button type="button" id="hours-submit-btn" class="btn-primary">Uren Opslaan</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- Hours Drawer -->
+	<div id="drawer-overlay" class="drawer-overlay"></div>
+	<div id="project-hours-drawer" class="hours-drawer">
+		<div class="drawer-inner card">
+			<div class="drawer-header">
+				<h3 id="drawer-project-title" class="serif"></h3>
+				<button id="drawer-close-btn" class="btn-icon" style="font-size:1.2rem;width:32px;height:32px;">×</button>
+			</div>
+			<div id="drawer-body" class="drawer-body"></div>
 		</div>
 	</div>
 </AppLayout>
@@ -249,8 +521,14 @@ import AppLayout from '../layouts/AppLayout.astro';
 	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
 	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
+	.list-filters { padding: 1rem 1.25rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem; }
+	.search-wrap { display: flex; align-items: center; gap: 0.6rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.6rem 1rem; flex: 1; }
+	.search-wrap svg { opacity: 0.4; flex-shrink: 0; }
+	.search-wrap input { background: transparent; border: none; outline: none; color: var(--color-text); font-size: 0.9rem; font-family: inherit; width: 100%; }
+	.search-wrap input::placeholder { color: var(--color-text-muted); }
+
 	.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 2rem; }
-	
+
 	.empty-state { grid-column: 1 / -1; padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
 
 	.project-card { padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; transition: transform 0.3s; position: relative; }
@@ -262,7 +540,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.p-client { font-size: 0.85rem; color: var(--color-text-muted); }
 	.p-client span { color: var(--color-text); font-weight: 500; }
 
-	.p-actions { display: flex; gap: 0.5rem; }
+	.p-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
 	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
 	.delete-project:hover { border-color: #fecaca; color: #fecaca; }
@@ -280,15 +558,63 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.p-fill-mini { height: 100%; background: var(--color-primary); }
 	.p-num-mini { font-size: 0.7rem; color: var(--color-text-muted); }
 
+	/* Hours Drawer */
+	.drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 900; display: none; }
+	.drawer-overlay.active { display: block; }
+
+	.hours-drawer { position: fixed; top: 0; right: -100%; width: 420px; max-width: 100vw; height: 100vh; z-index: 901; transition: right 0.35s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
+	.hours-drawer.active { right: 0; }
+
+	.drawer-inner { height: 100%; display: flex; flex-direction: column; border-radius: 0; border-right: none; overflow: hidden; }
+	.drawer-header { display: flex; justify-content: space-between; align-items: center; padding: 2rem; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+	.drawer-header h3 { font-size: 1.4rem; }
+	.drawer-body { flex: 1; overflow-y: auto; padding: 1.5rem 2rem 2rem; display: flex; flex-direction: column; gap: 0.75rem; }
+
+	.drawer-total { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; }
+	.drawer-total-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); }
+	.drawer-total-value { font-size: 2rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-serif); }
+
+	.drawer-section-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; margin-top: 0.5rem; }
+
+	.drawer-persons { display: flex; flex-direction: column; gap: 0.75rem; }
+	.drawer-person { display: flex; align-items: center; gap: 0.75rem; }
+	.drawer-avatar { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--color-primary); object-fit: cover; flex-shrink: 0; }
+	.drawer-person-info { flex: 1; min-width: 0; }
+	.drawer-person-name { font-size: 0.8rem; display: block; margin-bottom: 0.25rem; }
+	.drawer-bar-wrap { height: 4px; background: var(--color-border); border-radius: 100px; overflow: hidden; }
+	.drawer-bar { height: 100%; background: var(--color-primary); border-radius: 100px; transition: width 0.4s; }
+	.drawer-person-hours { font-size: 0.8rem; font-weight: 600; color: var(--color-primary); flex-shrink: 0; }
+
+	.drawer-timeline { display: flex; flex-direction: column; gap: 0.5rem; }
+	.drawer-entry { display: grid; grid-template-columns: 90px 1fr auto; gap: 0.5rem; align-items: start; padding: 0.6rem 0.75rem; background: var(--color-surface); border-radius: 8px; border: 1px solid var(--color-border); font-size: 0.8rem; }
+	.drawer-entry-date { color: var(--color-text-muted); font-size: 0.75rem; }
+	.drawer-entry-name { font-weight: 500; }
+	.drawer-entry-hours { color: var(--color-primary); font-weight: 600; text-align: right; }
+	.drawer-entry-desc { grid-column: 1 / -1; color: var(--color-text-muted); font-size: 0.75rem; }
+
+	.drawer-log-btn { margin-top: auto; width: 100%; border-radius: 8px; padding: 0.75rem; }
+
+	/* Hours Modal */
+	.persons-rows { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.75rem; }
+	.person-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem; align-items: center; }
+	.form-group { margin-bottom: 1.25rem; }
+	.form-group label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.5rem; letter-spacing: 0.1em; font-weight: 700; }
+	.form-ctrl, .person-row select, .person-row input { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.65rem 0.85rem; color: var(--color-text); font-family: inherit; font-size: 0.9rem; outline: none; width: 100%; transition: border-color 0.2s; }
+	.form-ctrl:focus, .person-row select:focus, .person-row input:focus { border-color: var(--color-primary); }
+	.person-row input[type="number"] { width: 80px; }
+	.add-person-btn { background: transparent; border: 1px dashed var(--color-border); color: var(--color-text-muted); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit; width: 100%; transition: all 0.2s; margin-bottom: 1rem; }
+	.add-person-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
 	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
 	.modal-overlay.active { display: flex; }
 	.modal-card { width: 100%; max-width: 500px; padding: 3rem; }
-	
+
 	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
 
 	@media (max-width: 600px) {
 		.page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
 		.form-row { grid-template-columns: 1fr; }
+		.hours-drawer { width: 100vw; }
 	}
 </style>
