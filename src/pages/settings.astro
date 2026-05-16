@@ -230,14 +230,19 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 		// Edit name inline
 		document.querySelectorAll('.koos-edit-song').forEach(btn => {
-			btn.addEventListener('click', (e) => {
+			btn.addEventListener('mousedown', (e) => {
+				e.preventDefault(); // prevent losing focus to the button
 				const row = (e.currentTarget as HTMLElement).closest('.koos-song-row') as HTMLElement;
 				const nameSpan = row.querySelector('.koos-song-name') as HTMLElement;
+				if (!nameSpan) return;
 				const currentName = nameSpan.textContent || '';
 				const id = row.dataset.id!;
 
-				nameSpan.outerHTML = `<input type="text" class="koos-name-edit-input" value="${currentName.replace(/"/g, '&quot;')}" />`;
-				const input = row.querySelector('.koos-name-edit-input') as HTMLInputElement;
+				const input = document.createElement('input');
+				input.type = 'text';
+				input.className = 'koos-name-edit-input';
+				input.value = currentName;
+				nameSpan.replaceWith(input);
 				input.focus();
 				input.select();
 
