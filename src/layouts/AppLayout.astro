@@ -815,7 +815,6 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 			<header class="header">
 				<div class="search" id="global-search-wrap">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-					<input type="text" id="global-search-input" placeholder="Quick search..." autocomplete="off" />
 					<input type="text" id="global-search-input" placeholder="Zoek overal... (⌘K)" autocomplete="off" />
 					<kbd class="search-shortcut">⌘K</kbd>
 					<div id="search-results-dropdown" class="search-dropdown hidden"></div>
@@ -908,18 +907,18 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 	.koos-overlay {
 		position: fixed;
 		bottom: 0;
-		right: 2.5rem;
+		left: 50%;
+		transform: translate(-50%, 110%);
 		z-index: 9999;
-		transform: translateY(110%);
 		transition: transform 0.65s cubic-bezier(0.34, 1.4, 0.64, 1);
 		pointer-events: none;
 	}
 	.koos-overlay.koos-active {
-		transform: translateY(0);
+		transform: translate(-50%, 0);
 		pointer-events: all;
 	}
 	.koos-card {
-		width: 220px;
+		width: 360px;
 		background: var(--color-card);
 		border: 2px solid var(--color-primary);
 		border-bottom: none;
@@ -954,8 +953,7 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		border-top: 1px solid var(--color-border);
 	}
 	@media (max-width: 600px) {
-		.koos-overlay { right: 1rem; }
-		.koos-card { width: 160px; }
+		.koos-card { width: calc(100vw - 2rem); }
 	}
 	.logo {
 		width: 32px; height: 32px; border: 1px solid var(--color-primary);
