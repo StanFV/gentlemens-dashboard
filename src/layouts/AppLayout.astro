@@ -500,13 +500,78 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 			document.getElementById('tab-editor')?.classList.add('hidden');
 		}
 	});
+
+	// -------------------------------------------------------------------------
+	// Koos Alberts Easter Egg
+	// -------------------------------------------------------------------------
+
+	let koosAudio: HTMLAudioElement | null = null;
+	let koosTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function triggerKoosEasterEgg() {
+		// Fetch random song from storage
+		const { data: songs } = await supabase.storage.from('koos-alberts').list('songs');
+		if (!songs?.length) return;
+
+		const pick = songs[Math.floor(Math.random() * songs.length)];
+		const songUrl = supabase.storage.from('koos-alberts').getPublicUrl('songs/' + pick.name).data.publicUrl;
+
+		// Fetch photo
+		const { data: photos } = await supabase.storage.from('koos-alberts').list('photo');
+		const photoImg = document.getElementById('koos-photo-img') as HTMLImageElement;
+		if (photos?.length && photoImg) {
+			photoImg.src = supabase.storage.from('koos-alberts').getPublicUrl('photo/' + photos[0].name).data.publicUrl;
+			photoImg.style.display = 'block';
+		} else if (photoImg) {
+			photoImg.style.display = 'none';
+		}
+
+		// Stop any previous audio
+		if (koosAudio) { koosAudio.pause(); koosAudio = null; }
+		koosAudio = new Audio(songUrl);
+		koosAudio.play().catch(() => {});
+
+		// Show overlay
+		document.getElementById('koos-overlay')?.classList.add('koos-active');
+
+		// Reset input if triggered from search
+		const inp = document.getElementById('global-search-input') as HTMLInputElement;
+		if (inp) inp.value = '';
+
+		// Auto-close after 15s
+		if (koosTimer) clearTimeout(koosTimer);
+		koosTimer = setTimeout(closeKoos, 15000);
+	}
+
+	function closeKoos() {
+		document.getElementById('koos-overlay')?.classList.remove('koos-active');
+		if (koosAudio) { koosAudio.pause(); koosAudio = null; }
+		if (koosTimer) { clearTimeout(koosTimer); koosTimer = null; }
+	}
+
+	// Logo click trigger
+	document.getElementById('koos-logo-trigger')?.addEventListener('click', triggerKoosEasterEgg);
+
+	// Koos overlay click to close
+	document.getElementById('koos-overlay')?.addEventListener('click', closeKoos);
+
+	// Search "koosje" + Enter trigger
+	document.getElementById('global-search-input')?.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter') {
+			const val = (e.currentTarget as HTMLInputElement).value.trim().toLowerCase();
+			if (val === 'koosje') {
+				e.preventDefault();
+				triggerKoosEasterEgg();
+			}
+		}
+	});
 </script>
 
 <Layout title={title}>
 	<div class="app">
 		<!-- Sidebar -->
 		<aside class="sidebar mobile-nav-ready">
-			<div class="brand">
+			<div class="brand" id="koos-logo-trigger" title="...">
 				<div class="logo">G</div>
 				<span class="brand-name serif">Gentlemen</span>
 			</div>
@@ -598,7 +663,7 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 			<header class="header">
 				<div class="search">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-					<input type="text" placeholder="Quick search..." />
+					<input type="text" id="global-search-input" placeholder="Quick search..." autocomplete="off" />
 				</div>
 				<div class="header-actions">
 					<div class="notification-wrapper">
@@ -653,6 +718,15 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 			<button id="save-order-btn" class="btn-primary save-order-btn">Save order</button>
 		</div>
 	</div>
+
+	<!-- Koos Alberts Easter Egg Overlay -->
+	<div id="koos-overlay" class="koos-overlay">
+		<div class="koos-card">
+			<div class="koos-vibes">♪ Koos Alberts ♪</div>
+			<img id="koos-photo-img" class="koos-photo-img" src="" alt="Koos Alberts" />
+			<div class="koos-footer serif">De Stem van het Volk</div>
+		</div>
+	</div>
 </Layout>
 
 <style is:global>
@@ -673,7 +747,61 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		flex-shrink: 0;
 	}
 
-	.brand { display: flex; align-items: center; gap: 1rem; margin-bottom: 4rem; }
+	.brand { display: flex; align-items: center; gap: 1rem; margin-bottom: 4rem; cursor: pointer; user-select: none; }
+
+	/* --- Koos Alberts Easter Egg --- */
+	.koos-overlay {
+		position: fixed;
+		bottom: 0;
+		right: 2.5rem;
+		z-index: 9999;
+		transform: translateY(110%);
+		transition: transform 0.65s cubic-bezier(0.34, 1.4, 0.64, 1);
+		pointer-events: none;
+	}
+	.koos-overlay.koos-active {
+		transform: translateY(0);
+		pointer-events: all;
+	}
+	.koos-card {
+		width: 220px;
+		background: var(--color-card);
+		border: 2px solid var(--color-primary);
+		border-bottom: none;
+		border-radius: 14px 14px 0 0;
+		overflow: hidden;
+		box-shadow: 0 -12px 50px rgba(197,160,89,0.35), 0 0 0 1px rgba(197,160,89,0.1);
+		cursor: pointer;
+	}
+	.koos-vibes {
+		background: var(--color-primary);
+		color: var(--color-bg);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-align: center;
+		padding: 0.4rem 0.5rem;
+		text-transform: uppercase;
+	}
+	.koos-photo-img {
+		width: 100%;
+		display: block;
+		aspect-ratio: 3/4;
+		object-fit: cover;
+		object-position: top;
+	}
+	.koos-footer {
+		padding: 0.6rem;
+		text-align: center;
+		font-size: 0.85rem;
+		color: var(--color-primary);
+		background: var(--color-surface);
+		border-top: 1px solid var(--color-border);
+	}
+	@media (max-width: 600px) {
+		.koos-overlay { right: 1rem; }
+		.koos-card { width: 160px; }
+	}
 	.logo {
 		width: 32px; height: 32px; border: 1px solid var(--color-primary);
 		color: var(--color-primary); display: flex; align-items: center;
