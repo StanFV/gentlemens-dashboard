@@ -1,0 +1,732 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+
+<script>
+	import { supabase } from '../lib/supabase';
+
+	// ── State ──────────────────────────────────────────────────────────────────
+	let currentUserId: string | null = null;
+	let editingEntryId: string | null = null;
+	let allEntries: any[] = [];
+	let projects: any[] = [];
+	let features: any[] = [];
+	let profiles: any[] = [];
+
+	// ── UI refs ────────────────────────────────────────────────────────────────
+	const modal         = document.getElementById('hours-modal')!;
+	const modalTitle    = document.getElementById('modal-title')!;
+	const form          = document.getElementById('hours-form') as HTMLFormElement;
+	const submitBtn     = document.getElementById('submit-btn')!;
+	const openBtn       = document.getElementById('open-modal-btn')!;
+	const cancelBtn     = document.getElementById('cancel-btn')!;
+	const container     = document.getElementById('entries-container')!;
+	const filterUser    = document.getElementById('filter-user') as HTMLSelectElement;
+	const filterPeriod  = document.getElementById('filter-period') as HTMLSelectElement;
+	const filterProject = document.getElementById('filter-project') as HTMLSelectElement;
+	const filterFeature = document.getElementById('filter-feature') as HTMLSelectElement;
+	const searchInput   = document.getElementById('search-input') as HTMLInputElement;
+	const projectSel    = document.getElementById('project_id') as HTMLSelectElement;
+	const featureSel    = document.getElementById('feature_id') as HTMLSelectElement;
+	const totalHoursEl  = document.getElementById('total-hours')!;
+	const myHoursEl     = document.getElementById('my-hours')!;
+	const memberCountEl = document.getElementById('member-count')!;
+	const personsSection   = document.getElementById('persons-section')!;
+	const singleSection    = document.getElementById('single-hours-section')!;
+	const personsContainer = document.getElementById('persons-container')!;
+	const addPersonBtn     = document.getElementById('add-person-btn')!;
+
+	// ── Auth ───────────────────────────────────────────────────────────────────
+	const { data: { session } } = await supabase.auth.getSession();
+	if (session) currentUserId = session.user.id;
+
+	// ── Bootstrap ──────────────────────────────────────────────────────────────
+	async function init() {
+		await Promise.all([loadProjects(), loadFeatures(), loadProfiles()]);
+		await loadEntries();
+		await populateUserFilter();
+	}
+
+	// ── Data loaders ───────────────────────────────────────────────────────────
+	async function loadProjects() {
+		const { data } = await supabase.from('projects').select('id, title').order('title');
+		projects = data || [];
+		projectSel.innerHTML = '<option value="">— Geen —</option>' +
+			projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+		filterProject.innerHTML = '<option value="all">Alle projecten</option>' +
+			projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+	}
+
+	async function loadFeatures() {
+		const { data } = await supabase.from('feature_requests').select('id, title').order('title');
+		features = data || [];
+		featureSel.innerHTML = '<option value="">— Geen —</option>' +
+			features.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
+		filterFeature.innerHTML = '<option value="all">Alle features</option>' +
+			features.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
+	}
+
+	async function loadProfiles() {
+		const { data } = await supabase.from('profiles').select('id, full_name, username').order('full_name');
+		profiles = data || [];
+	}
+
+	async function loadEntries() {
+		const { data, error } = await supabase
+			.from('time_entries')
+			.select(`
+				id, title, description, hours, date, created_at,
+				user_id, logged_by,
+				project:projects(id, title),
+				feature:feature_requests(id, title),
+				profile:profiles!time_entries_profile_fkey(full_name, username, avatar_url)
+			`)
+			.order('date', { ascending: false })
+			.order('created_at', { ascending: false });
+
+		if (error) { console.error(error); return; }
+		allEntries = data || [];
+		renderEntries();
+		updateStats();
+	}
+
+	async function populateUserFilter() {
+		const uniqueUsers = [...new Map(allEntries.map(e => [e.user_id, e.profile])).entries()];
+		filterUser.innerHTML = '<option value="all">Alle leden</option>' +
+			uniqueUsers.map(([uid, p]) =>
+				`<option value="${uid}">${p?.full_name || p?.username || 'Onbekend'}</option>`
+			).join('');
+	}
+
+	// ── Multi-person rows ───────────────────────────────────────────────────────
+	function profileOptions(selectedId = '') {
+		return profiles.map(p => {
+			const name = p.full_name || p.username || 'Onbekend';
+			const suffix = p.id === currentUserId ? ' (jij)' : '';
+			return `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${name}${suffix}</option>`;
+		}).join('');
+	}
+
+	function buildPersonRow(userId = '', hours = '') {
+		const row = document.createElement('div');
+		row.className = 'person-row';
+		row.innerHTML = `
+			<select class="person-select" required>
+				<option value="">Selecteer persoon</option>
+				${profileOptions(userId)}
+			</select>
+			<div class="person-hours-wrap">
+				<input type="number" class="person-hours" min="0.25" max="24" step="0.25"
+					placeholder="uren" value="${hours}" required />
+				<span class="hours-unit">u</span>
+			</div>
+			<button type="button" class="remove-person-btn btn-icon" title="Verwijderen">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+					fill="none" stroke="currentColor" stroke-width="2.5"
+					stroke-linecap="round" stroke-linejoin="round">
+					<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+				</svg>
+			</button>
+		`;
+		row.querySelector('.remove-person-btn')!.addEventListener('click', () => {
+			if (personsContainer.querySelectorAll('.person-row').length > 1) row.remove();
+		});
+		return row;
+	}
+
+	function resetPersonRows(preselectedUserId = '') {
+		personsContainer.innerHTML = '';
+		personsContainer.appendChild(buildPersonRow(preselectedUserId || currentUserId || ''));
+	}
+
+	addPersonBtn.addEventListener('click', () => {
+		personsContainer.appendChild(buildPersonRow());
+	});
+
+	// ── Filtering ──────────────────────────────────────────────────────────────
+	function getFilteredEntries() {
+		const userVal    = filterUser.value;
+		const periodVal  = filterPeriod.value;
+		const projectVal = filterProject.value;
+		const featureVal = filterFeature.value;
+		const searchVal  = searchInput.value.trim().toLowerCase();
+		const now        = new Date();
+
+		return allEntries.filter(e => {
+			if (userVal !== 'all' && e.user_id !== userVal) return false;
+			if (periodVal !== 'all') {
+				const entryDate = new Date(e.date);
+				if (periodVal === 'week') {
+					const monday = new Date(now);
+					monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+					monday.setHours(0, 0, 0, 0);
+					if (entryDate < monday) return false;
+				} else if (periodVal === 'month') {
+					if (entryDate.getMonth() !== now.getMonth() || entryDate.getFullYear() !== now.getFullYear()) return false;
+				} else if (periodVal === 'year') {
+					if (entryDate.getFullYear() !== now.getFullYear()) return false;
+				}
+			}
+			if (projectVal !== 'all' && e.project?.id !== projectVal) return false;
+			if (featureVal !== 'all' && e.feature?.id !== featureVal) return false;
+			if (searchVal) {
+				const title    = (e.title || '').toLowerCase();
+				const desc     = (e.description || '').toLowerCase();
+				const fullName = (e.profile?.full_name || '').toLowerCase();
+				const username = (e.profile?.username || '').toLowerCase();
+				if (!title.includes(searchVal) && !desc.includes(searchVal) && !fullName.includes(searchVal) && !username.includes(searchVal)) return false;
+			}
+			return true;
+		});
+	}
+
+
+	// ── Stats ──────────────────────────────────────────────────────────────────
+	function updateStats() {
+		const filtered = getFilteredEntries();
+		const total    = filtered.reduce((s, e) => s + Number(e.hours), 0);
+		const mine     = filtered.filter(e => e.user_id === currentUserId).reduce((s, e) => s + Number(e.hours), 0);
+		const members  = new Set(filtered.map(e => e.user_id)).size;
+
+		totalHoursEl.textContent  = total.toFixed(1);
+		myHoursEl.textContent     = mine.toFixed(1);
+		memberCountEl.textContent = members.toString();
+	}
+
+	// ── Render ─────────────────────────────────────────────────────────────────
+	function renderEntries() {
+		const filtered = getFilteredEntries();
+
+		if (filtered.length === 0) {
+			container.innerHTML = `<div class="empty-state"><p>Geen urenregistraties gevonden.</p></div>`;
+			return;
+		}
+
+		const groups = new Map<string, any[]>();
+		for (const e of filtered) {
+			if (!groups.has(e.date)) groups.set(e.date, []);
+			groups.get(e.date)!.push(e);
+		}
+
+		container.innerHTML = [...groups.entries()].map(([date, entries]) => {
+			const dayTotal = entries.reduce((s, e) => s + Number(e.hours), 0);
+			return `
+				<div class="day-group">
+					<div class="day-header">
+						<span class="day-label">${formatDate(date)}</span>
+						<span class="day-total">${dayTotal.toFixed(1)}h totaal</span>
+					</div>
+					${entries.map(e => entryRow(e)).join('')}
+				</div>
+			`;
+		}).join('');
+
+		container.querySelectorAll('.edit-entry').forEach(btn => {
+			btn.addEventListener('click', () => openModal((btn as HTMLElement).dataset.id!));
+		});
+		container.querySelectorAll('.delete-entry').forEach(btn => {
+			btn.addEventListener('click', async () => {
+				const id = (btn as HTMLElement).dataset.id!;
+				if (confirm('Weet je zeker dat je deze registratie wilt verwijderen?')) {
+					await supabase.from('time_entries').delete().eq('id', id);
+					loadEntries();
+				}
+			});
+		});
+	}
+
+	function entryRow(e: any) {
+		const canEdit = e.logged_by === currentUserId || e.user_id === currentUserId;
+		const name    = e.profile?.full_name || e.profile?.username || 'Onbekend';
+		const avatar  = e.profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+		const context = [
+			e.project ? `<span class="tag tag-project">${e.project.title}</span>` : '',
+			e.feature ? `<span class="tag tag-feature">${e.feature.title}</span>` : '',
+		].filter(Boolean).join('');
+
+		return `
+			<div class="entry-row">
+				<div class="entry-member">
+					<img src="${avatar}" class="entry-avatar" alt="${name}" />
+					<span class="entry-name">${name}</span>
+				</div>
+				<div class="entry-info">
+					<p class="entry-title">${e.title}</p>
+					${e.description ? `<p class="entry-desc">${e.description}</p>` : ''}
+					${context ? `<div class="entry-tags">${context}</div>` : ''}
+				</div>
+				<div class="entry-hours">${Number(e.hours).toFixed(1)}h</div>
+				<div class="entry-actions">
+					${canEdit ? `
+						<button class="btn-icon edit-entry" data-id="${e.id}" title="Bewerken">
+							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+						</button>
+						<button class="btn-icon delete-entry" data-id="${e.id}" title="Verwijderen">
+							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H5c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+						</button>
+					` : ''}
+				</div>
+			</div>
+		`;
+	}
+
+	function formatDate(dateStr: string) {
+		const d = new Date(dateStr + 'T12:00:00');
+		return d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+	}
+
+	// ── Modal ──────────────────────────────────────────────────────────────────
+	function openModal(editId: string | null = null) {
+		editingEntryId = editId;
+		form.reset();
+		(document.getElementById('date') as HTMLInputElement).value = new Date().toISOString().split('T')[0];
+
+		if (editId) {
+			// Edit mode: single-person view
+			modalTitle.innerHTML = 'Bewerk <span class="gold-text">Registratie</span>';
+			submitBtn.textContent = 'Bijwerken';
+			personsSection.style.display = 'none';
+			singleSection.style.display = 'block';
+
+			const entry = allEntries.find(e => e.id === editId);
+			if (entry) {
+				(document.getElementById('title-input') as HTMLInputElement).value = entry.title;
+				(document.getElementById('description') as HTMLTextAreaElement).value = entry.description || '';
+				(document.getElementById('single-hours') as HTMLInputElement).value = entry.hours;
+				(document.getElementById('date') as HTMLInputElement).value = entry.date;
+				projectSel.value = entry.project?.id || '';
+				featureSel.value = entry.feature?.id || '';
+				const p = entry.profile;
+				const name = p?.full_name || p?.username || 'Onbekend';
+				document.getElementById('single-person-name')!.textContent = name;
+			}
+		} else {
+			// New mode: multi-person
+			modalTitle.innerHTML = 'Log <span class="gold-text">Uren</span>';
+			submitBtn.textContent = 'Uren opslaan';
+			personsSection.style.display = 'block';
+			singleSection.style.display = 'none';
+			resetPersonRows();
+		}
+		modal.classList.add('active');
+	}
+
+	function closeModal() {
+		modal.classList.remove('active');
+		editingEntryId = null;
+		form.reset();
+	}
+
+	openBtn.addEventListener('click', () => openModal());
+	cancelBtn.addEventListener('click', closeModal);
+	modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+	// ── Submit ─────────────────────────────────────────────────────────────────
+	form.addEventListener('submit', async e => {
+		e.preventDefault();
+		if (!currentUserId) return;
+
+		const fd       = new FormData(form);
+		const title    = fd.get('title') as string;
+		const desc     = (fd.get('description') as string) || null;
+		const date     = fd.get('date') as string;
+		const projId   = (fd.get('project_id') as string) || null;
+		const featId   = (fd.get('feature_id') as string) || null;
+
+		if (editingEntryId) {
+			// Single edit
+			const hours = parseFloat(fd.get('single-hours') as string);
+			const { error } = await supabase.from('time_entries').update({
+				title, description: desc, hours, date, project_id: projId, feature_id: featId,
+			}).eq('id', editingEntryId);
+			if (error) { alert(error.message); return; }
+		} else {
+			// Multi-person insert
+			const rows = personsContainer.querySelectorAll('.person-row');
+			const entries: any[] = [];
+			for (const row of rows) {
+				const uid   = (row.querySelector('.person-select') as HTMLSelectElement).value;
+				const hrs   = parseFloat((row.querySelector('.person-hours') as HTMLInputElement).value);
+				if (!uid || isNaN(hrs)) continue;
+				entries.push({
+					user_id: uid, logged_by: currentUserId,
+					title, description: desc, hours: hrs, date,
+					project_id: projId, feature_id: featId,
+				});
+			}
+			if (entries.length === 0) return;
+			const { error } = await supabase.from('time_entries').insert(entries);
+			if (error) { alert(error.message); return; }
+		}
+
+		closeModal();
+		loadEntries();
+	});
+
+	// ── Filter toggle ──────────────────────────────────────────────────────────
+	const filtersToggle     = document.getElementById('filters-toggle')!;
+	const filtersPanel      = document.getElementById('filters-panel')!;
+	const activeFilterCount = document.getElementById('active-filter-count')!;
+
+	filtersToggle.addEventListener('click', () => {
+		const open = filtersPanel.classList.toggle('open');
+		filtersToggle.classList.toggle('active', open);
+	});
+
+	function updateFilterBadge() {
+		const userVal    = filterUser.value;
+		const periodVal  = filterPeriod.value;
+		const projectVal = filterProject.value;
+		const featureVal = filterFeature.value;
+		let count = 0;
+		if (userVal !== 'all')    count++;
+		if (periodVal !== 'all')  count++;
+		if (projectVal !== 'all') count++;
+		if (featureVal !== 'all') count++;
+		activeFilterCount.textContent = String(count);
+		activeFilterCount.style.display = count > 0 ? 'flex' : 'none';
+		filtersToggle.classList.toggle('has-filters', count > 0);
+	}
+
+	filterUser.addEventListener('change',    () => { updateFilterBadge(); renderEntries(); updateStats(); });
+	filterPeriod.addEventListener('change',  () => { updateFilterBadge(); renderEntries(); updateStats(); });
+	filterProject.addEventListener('change', () => { updateFilterBadge(); renderEntries(); updateStats(); });
+	filterFeature.addEventListener('change', () => { updateFilterBadge(); renderEntries(); updateStats(); });
+	searchInput.addEventListener('input',    () => { renderEntries(); updateStats(); });
+
+	init();
+</script>
+
+<AppLayout title="Hours | Gentlemen's Dashboard">
+	<header class="page-header">
+		<div>
+			<h1 class="serif">Time <span class="gold-text italic">Registration</span></h1>
+			<p class="subtitle">Log and review hours across projects and features.</p>
+		</div>
+		<button id="open-modal-btn" class="btn-primary">+ Log uren</button>
+	</header>
+
+	<!-- Stats -->
+	<div class="stats-row">
+		<div class="stat-card card">
+			<span class="stat-label">Totaal uren</span>
+			<span class="stat-value serif" id="total-hours">—</span>
+		</div>
+		<div class="stat-card card">
+			<span class="stat-label">Mijn uren</span>
+			<span class="stat-value serif" id="my-hours">—</span>
+		</div>
+		<div class="stat-card card">
+			<span class="stat-label">Actieve leden</span>
+			<span class="stat-value serif" id="member-count">—</span>
+		</div>
+	</div>
+
+	<!-- Search + Filters -->
+	<div class="list-filters card">
+		<div class="filters-top">
+			<div class="search-wrap">
+				<svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+				<input id="search-input" type="text" placeholder="Zoek op titel, omschrijving of naam..." />
+			</div>
+			<button id="filters-toggle" class="filters-toggle-btn">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+				Filters
+				<span id="active-filter-count" class="filter-badge" style="display:none">0</span>
+			</button>
+		</div>
+		<div id="filters-panel" class="filters-panel">
+			<div class="filters-panel-row">
+				<div class="filter-control">
+					<label class="filter-control-label" for="filter-user">Lid</label>
+					<select id="filter-user" class="filter-select">
+						<option value="all">Alle leden</option>
+					</select>
+				</div>
+				<div class="filter-control">
+					<label class="filter-control-label" for="filter-period">Periode</label>
+					<select id="filter-period" class="filter-select">
+						<option value="all">Alle tijd</option>
+						<option value="week">Deze week</option>
+						<option value="month">Deze maand</option>
+						<option value="year">Dit jaar</option>
+					</select>
+				</div>
+				<div class="filter-control">
+					<label class="filter-control-label" for="filter-project">Project</label>
+					<select id="filter-project" class="filter-select">
+						<option value="all">Alle projecten</option>
+					</select>
+				</div>
+				<div class="filter-control">
+					<label class="filter-control-label" for="filter-feature">Feature</label>
+					<select id="filter-feature" class="filter-select">
+						<option value="all">Alle features</option>
+					</select>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Entries list -->
+	<div id="entries-container" class="entries-container">
+		<div class="empty-state"><p>Uren laden...</p></div>
+	</div>
+
+	<!-- Modal -->
+	<div id="hours-modal" class="modal-overlay">
+		<div class="modal-card card">
+			<h2 id="modal-title" class="serif">Log <span class="gold-text">Uren</span></h2>
+			<form id="hours-form">
+				<div class="form-group">
+					<label for="title-input">Wat heb je gedaan? *</label>
+					<input type="text" id="title-input" name="title" required placeholder="Korte omschrijving van de werkzaamheden" />
+				</div>
+				<div class="form-group">
+					<label for="description">Toelichting</label>
+					<textarea id="description" name="description" rows="2" placeholder="Optionele uitleg..."></textarea>
+				</div>
+				<div class="form-row">
+					<div class="form-group">
+						<label for="date">Datum *</label>
+						<input type="date" id="date" name="date" required />
+					</div>
+					<div class="form-group">
+						<label for="project_id">Project</label>
+						<select id="project_id" name="project_id">
+							<option value="">— Geen —</option>
+						</select>
+					</div>
+				</div>
+				<div class="form-group">
+					<label for="feature_id">Feature / Bug</label>
+					<select id="feature_id" name="feature_id">
+						<option value="">— Geen —</option>
+					</select>
+				</div>
+
+				<!-- Multi-person section (new entries) -->
+				<div id="persons-section">
+					<p class="persons-label">Voor wie schrijf je uren?</p>
+					<div id="persons-container" class="persons-container"></div>
+					<button type="button" id="add-person-btn" class="add-person-btn">
+						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+						Persoon toevoegen
+					</button>
+				</div>
+
+				<!-- Single-person section (edit mode) -->
+				<div id="single-hours-section" style="display:none;">
+					<div class="form-row">
+						<div class="form-group">
+							<label>Persoon</label>
+							<div class="single-person-display" id="single-person-name">—</div>
+						</div>
+						<div class="form-group">
+							<label for="single-hours">Uren *</label>
+							<input type="number" id="single-hours" name="single-hours" min="0.25" max="24" step="0.25" placeholder="bijv. 2.5" />
+						</div>
+					</div>
+				</div>
+
+				<div class="modal-actions">
+					<button type="button" id="cancel-btn" class="btn-secondary">Annuleren</button>
+					<button type="submit" id="submit-btn" class="btn-primary">Uren opslaan</button>
+				</div>
+			</form>
+		</div>
+	</div>
+</AppLayout>
+
+<style is:global>
+	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2.5rem; }
+	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
+	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
+
+	.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
+	.stat-card { padding: 1.75rem 2rem; display: flex; flex-direction: column; gap: 0.5rem; }
+	.stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); }
+	.stat-value { font-size: 2.5rem; line-height: 1; color: var(--color-primary); }
+
+	/* Filter bar */
+	.list-filters { padding: 0; margin-bottom: 2rem; overflow: hidden; }
+
+	.filters-top {
+		display: flex; align-items: center; gap: 1rem;
+		padding: 0.85rem 1.25rem; flex-wrap: wrap;
+	}
+
+	.search-wrap {
+		display: flex; align-items: center; gap: 0.6rem;
+		flex: 1; min-width: 180px;
+		background: var(--color-surface); border: 1.5px solid var(--color-border);
+		border-radius: 10px; padding: 0.55rem 1rem;
+		transition: border-color 0.2s, box-shadow 0.2s;
+	}
+	.search-wrap:focus-within {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.1);
+	}
+	.search-icon { color: var(--color-primary); flex-shrink: 0; }
+	.search-wrap input {
+		flex: 1; background: transparent; border: none; outline: none;
+		color: var(--color-text); font-family: inherit; font-size: 0.9rem;
+	}
+	.search-wrap input::placeholder { color: var(--color-text-muted); }
+
+	.filters-toggle-btn {
+		display: inline-flex; align-items: center; gap: 0.45rem;
+		background: var(--color-surface); border: 1px solid var(--color-border);
+		color: var(--color-text-muted); padding: 0.5rem 1rem;
+		border-radius: 100px; font-size: 0.85rem; font-family: inherit;
+		cursor: pointer; transition: all 0.2s; white-space: nowrap;
+	}
+	.filters-toggle-btn:hover,
+	.filters-toggle-btn.active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-dim); }
+	.filters-toggle-btn.has-filters { border-color: var(--color-primary); color: var(--color-primary); }
+
+	.filter-badge {
+		display: flex; align-items: center; justify-content: center;
+		width: 18px; height: 18px; border-radius: 50%;
+		background: var(--color-primary); color: var(--color-bg);
+		font-size: 0.65rem; font-weight: 700; line-height: 1;
+	}
+
+	.filters-panel {
+		display: grid; grid-template-rows: 0fr;
+		transition: grid-template-rows 0.25s ease;
+	}
+	.filters-panel.open { grid-template-rows: 1fr; }
+	.filters-panel-row {
+		overflow: hidden; display: flex; gap: 2rem; flex-wrap: wrap;
+		padding: 0 1.25rem;
+		transition: padding 0.25s ease;
+	}
+	.filters-panel.open .filters-panel-row { padding: 1.25rem 1.25rem; border-top: 1px solid var(--color-border); }
+
+	.filter-control { display: flex; flex-direction: column; gap: 0.5rem; }
+	.filter-control-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
+
+	.filter-select {
+		background: var(--color-surface); border: 1px solid var(--color-border);
+		color: var(--color-text); padding: 0.45rem 0.9rem; border-radius: 8px;
+		font-family: inherit; font-size: 0.85rem; cursor: pointer; outline: none;
+		min-width: 160px; transition: border-color 0.2s;
+	}
+	.filter-select:focus { border-color: var(--color-primary); }
+
+	.entries-container { display: flex; flex-direction: column; gap: 1.5rem; }
+	.day-group { display: flex; flex-direction: column; }
+	.day-header { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 1rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px 10px 0 0; }
+	.day-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); }
+	.day-total { font-size: 0.8rem; font-weight: 600; color: var(--color-primary); }
+
+	.entry-row { display: grid; grid-template-columns: 180px 1fr 60px 80px; align-items: center; gap: 1rem; padding: 1rem 1.25rem; background: var(--color-card); border: 1px solid var(--color-border); border-top: none; transition: background 0.2s; }
+	.entry-row:last-child { border-radius: 0 0 10px 10px; }
+	.entry-row:hover { background: rgba(197, 160, 89, 0.03); }
+
+	.entry-member { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+	.entry-avatar { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--color-primary); object-fit: cover; flex-shrink: 0; }
+	.entry-name { font-size: 0.8rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+	.entry-info { min-width: 0; }
+	.entry-title { font-size: 0.9rem; font-weight: 500; color: var(--color-text); margin-bottom: 0.2rem; }
+	.entry-desc { font-size: 0.78rem; color: var(--color-text-muted); line-height: 1.4; margin-bottom: 0.35rem; white-space: pre-line; }
+	.entry-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+	.tag { font-size: 0.65rem; padding: 0.2rem 0.55rem; border-radius: 100px; font-weight: 600; letter-spacing: 0.04em; }
+	.tag-project { background: rgba(197, 160, 89, 0.15); color: var(--color-primary); border: 1px solid rgba(197, 160, 89, 0.3); }
+	.tag-feature { background: rgba(99, 179, 237, 0.1); color: #63b3ed; border: 1px solid rgba(99, 179, 237, 0.25); }
+
+	.entry-hours { font-size: 1rem; font-weight: 700; color: var(--color-primary); text-align: right; }
+	.entry-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+
+	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.4rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
+	.delete-entry:hover { border-color: #fecaca; color: #fecaca; }
+
+	.empty-state { padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; background: var(--color-card); border: 1px solid var(--color-border); border-radius: 12px; }
+
+	/* ── Modal ── */
+	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(12px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
+	.modal-overlay.active { display: flex; }
+	.modal-card { width: 100%; max-width: 580px; padding: 2.5rem 3rem 3rem; border-radius: 16px; max-height: 92vh; overflow-y: auto; }
+	.modal-card h2 { font-size: 2rem; margin-bottom: 2rem; }
+
+	.form-group { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem; }
+	.form-group label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); font-weight: 600; }
+	.form-group input,
+	.form-group textarea,
+	.form-group select {
+		background: var(--color-surface); border: 1px solid var(--color-border);
+		color: var(--color-text); padding: 0.85rem 1.1rem; border-radius: 10px;
+		font-size: 0.95rem; font-family: inherit;
+		transition: border-color 0.2s, box-shadow 0.2s;
+		width: 100%; box-sizing: border-box;
+	}
+	.form-group input:focus,
+	.form-group textarea:focus,
+	.form-group select:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(197,160,89,0.12); }
+	.form-group textarea { resize: vertical; min-height: 70px; }
+	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+	/* Multi-person rows */
+	.persons-label {
+		font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+		color: var(--color-text-muted); font-weight: 600;
+		margin: 0.25rem 0 0.75rem;
+	}
+	.persons-container { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.75rem; }
+	.person-row { display: grid; grid-template-columns: 1fr 110px 36px; gap: 0.6rem; align-items: center; }
+	.person-row select,
+	.person-row input {
+		background: var(--color-surface); border: 1px solid var(--color-border);
+		color: var(--color-text); border-radius: 10px; font-family: inherit;
+		font-size: 0.9rem; padding: 0.75rem 0.9rem; width: 100%; box-sizing: border-box;
+		transition: border-color 0.2s, box-shadow 0.2s;
+	}
+	.person-row select:focus,
+	.person-row input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(197,160,89,0.1); }
+	.person-hours-wrap { position: relative; }
+	.person-hours-wrap input { padding-right: 2rem; }
+	.hours-unit { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--color-text-muted); pointer-events: none; }
+	.remove-person-btn { flex-shrink: 0; }
+	.remove-person-btn:hover { border-color: #fecaca; color: #fecaca; }
+
+	.add-person-btn {
+		display: inline-flex; align-items: center; gap: 0.5rem;
+		background: transparent; border: 1px dashed var(--color-border);
+		color: var(--color-text-muted); padding: 0.6rem 1rem;
+		border-radius: 8px; font-size: 0.85rem; cursor: pointer;
+		transition: all 0.2s; width: 100%; justify-content: center;
+		margin-bottom: 1.5rem;
+	}
+	.add-person-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+	/* Single-person edit display */
+	.single-person-display {
+		background: var(--color-surface); border: 1px solid var(--color-border);
+		border-radius: 10px; padding: 0.85rem 1.1rem;
+		font-size: 0.9rem; color: var(--color-text-muted);
+	}
+
+	.gold-text { color: var(--color-primary); }
+	.italic { font-style: italic; }
+
+	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--color-border); }
+	.modal-actions .btn-primary,
+	.modal-actions .btn-secondary { flex: 1; padding: 0.85rem; border-radius: 10px; font-size: 0.9rem; font-weight: 600; text-align: center; }
+
+	@media (max-width: 700px) {
+		.stats-row { grid-template-columns: 1fr; gap: 1rem; }
+		.filters { gap: 1rem; }
+		.entry-row { grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 0.5rem 1rem; }
+		.entry-member { grid-column: 1; }
+		.entry-hours { grid-column: 2; grid-row: 1; }
+		.entry-info { grid-column: 1 / -1; }
+		.entry-actions { grid-column: 2; grid-row: 2; }
+		.page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+		.form-row { grid-template-columns: 1fr; }
+		.person-row { grid-template-columns: 1fr 90px 36px; }
+		.modal-card { padding: 2rem 1.5rem; }
+	}
+</style>

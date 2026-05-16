@@ -20,17 +20,51 @@ import AppLayout from '../layouts/AppLayout.astro';
 	</header>
 
 	<div class="list-filters card">
-		<div class="filter-group">
-			<button class="filter-btn active" data-status="all">All</button>
-			<button class="filter-btn" data-status="planned">Planned</button>
-			<button class="filter-btn" data-status="in-progress">In Progress</button>
-			<button class="filter-btn" data-status="completed">Completed</button>
+		<div class="filters-top">
+			<div class="search-wrap">
+				<svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+				<input type="text" id="backlog-search" placeholder="Zoeken op titel, omschrijving..." />
+			</div>
+			<div class="filters-top-right">
+				<div class="filter-group">
+					<button class="filter-btn active" data-status="all">All</button>
+					<button class="filter-btn" data-status="planned">Planned</button>
+					<button class="filter-btn" data-status="in-progress">In Progress</button>
+					<button class="filter-btn" data-status="completed">Completed</button>
+				</div>
+				<button id="filters-toggle" class="filters-toggle-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+					Filters
+					<span id="active-filter-count" class="filter-badge" style="display:none">0</span>
+				</button>
+			</div>
 		</div>
-		<div class="sort-group">
-			<span class="sort-label">Sort:</span>
-			<button class="sort-btn active" data-sort="date">Date</button>
-			<button class="sort-btn" data-sort="priority">Priority</button>
-			<button class="sort-btn" data-sort="category">Category</button>
+		<div id="filters-panel" class="filters-panel">
+			<div class="filters-panel-row">
+				<div class="filter-control">
+					<label class="filter-control-label">Sorteren</label>
+					<div class="sort-group">
+						<button class="sort-btn active" data-sort="date">Date</button>
+						<button class="sort-btn" data-sort="priority">Priority</button>
+						<button class="sort-btn" data-sort="category">Category</button>
+					</div>
+				</div>
+				<div class="filter-control">
+					<label class="filter-control-label" for="filter-person">Lid</label>
+					<select id="filter-person" class="filter-select">
+						<option value="">Alle leden</option>
+					</select>
+				</div>
+				<div class="filter-control">
+					<label class="filter-control-label" for="filter-period">Periode</label>
+					<select id="filter-period" class="filter-select">
+						<option value="">Alle periodes</option>
+						<option value="week">Deze week</option>
+						<option value="month">Deze maand</option>
+						<option value="year">Dit jaar</option>
+					</select>
+				</div>
+			</div>
 		</div>
 	</div>
 
@@ -45,6 +79,61 @@ import AppLayout from '../layouts/AppLayout.astro';
 		</div>
 		<div id="backlog-container" class="list-items">
 			<div class="loading-state">Loading the backlog...</div>
+		</div>
+	</div>
+
+	<!-- Drawer overlay -->
+	<div id="drawer-overlay" class="drawer-overlay"></div>
+
+	<!-- Per-feature hours drawer -->
+	<div id="feature-hours-drawer" class="hours-drawer">
+		<div class="drawer-inner card">
+			<div class="drawer-header">
+				<div>
+					<h3 class="serif">Uren <span class="gold-text">overzicht</span></h3>
+					<p id="drawer-feature-title" class="drawer-subtitle"></p>
+				</div>
+				<button id="close-drawer-btn" class="btn-icon close-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+				</button>
+			</div>
+			<div id="drawer-body" class="drawer-body"></div>
+		</div>
+	</div>
+
+	<!-- Hours Modal -->
+	<div id="hours-modal" class="modal-overlay">
+		<div class="modal-card card">
+			<h2 class="serif">Log <span class="gold-text">Uren</span></h2>
+			<div id="hours-context-chip" class="hours-context-chip" style="display:none;">
+				<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+				<span id="hours-context-text"></span>
+			</div>
+			<form id="hours-form">
+				<input type="hidden" id="hours-feature-id" name="feature_id" />
+				<div class="form-group">
+					<label for="hours-title">Wat heb je gedaan? *</label>
+					<input type="text" id="hours-title" name="title" required placeholder="Korte omschrijving van je werkzaamheden" />
+				</div>
+				<div class="form-group">
+					<label for="hours-description">Toelichting</label>
+					<textarea id="hours-description" name="description" rows="2" placeholder="Optionele uitleg..."></textarea>
+				</div>
+				<div class="form-group">
+					<label for="hours-date">Datum *</label>
+					<input type="date" id="hours-date" name="date" required />
+				</div>
+				<p class="persons-label">Voor wie schrijf je uren?</p>
+				<div id="hours-persons-container" class="persons-container"></div>
+				<button type="button" id="hours-add-person-btn" class="add-person-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+					Persoon toevoegen
+				</button>
+				<div class="modal-actions">
+					<button type="button" id="hours-cancel-btn" class="btn-secondary">Annuleren</button>
+					<button type="submit" class="btn-primary">Uren opslaan</button>
+				</div>
+			</form>
 		</div>
 	</div>
 
@@ -117,12 +206,21 @@ import AppLayout from '../layouts/AppLayout.astro';
 		const userSelect = document.getElementById('assigned_to') as HTMLSelectElement;
 		const modalTitleEl = document.getElementById('modal-title');
 		const submitBtn = document.getElementById('submit-btn');
+		const searchInput = document.getElementById('backlog-search') as HTMLInputElement;
+		const filterPerson = document.getElementById('filter-person') as HTMLSelectElement;
+		const filterPeriod = document.getElementById('filter-period') as HTMLSelectElement;
+		const hoursDrawer = document.getElementById('feature-hours-drawer')!;
+		const drawerOverlay = document.getElementById('drawer-overlay')!;
 
 		let currentStatus = 'all';
 		let currentSort = 'date';
-		let cachedItems = [];
+		let searchQuery = '';
+		let personFilter = '';
+		let periodFilter = '';
+		let cachedItems: any[] = [];
+		let drawerFeatureId = '';
 
-		const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+		const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 		function priorityIcon(p: string) {
 			if (p === 'high') return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>`;
@@ -142,17 +240,56 @@ import AppLayout from '../layouts/AppLayout.astro';
 			return sorted;
 		}
 
+		function getFilteredItems(items: any[]) {
+			return items.filter(f => {
+				// Text search
+				if (searchQuery) {
+					const q = searchQuery.toLowerCase();
+					const matchText = (f.title || '').toLowerCase().includes(q) ||
+						(f.description || '').toLowerCase().includes(q);
+					if (!matchText) return false;
+				}
+				// Person filter (assigned_to)
+				if (personFilter && f.assigned_to !== personFilter) return false;
+				// Period filter (created_at)
+				if (periodFilter) {
+					const created = new Date(f.created_at);
+					const now = new Date();
+					if (periodFilter === 'week') {
+						const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+						if (created < weekAgo) return false;
+					} else if (periodFilter === 'month') {
+						const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth() - 1);
+						if (created < monthAgo) return false;
+					} else if (periodFilter === 'year') {
+						const yearAgo = new Date(now); yearAgo.setFullYear(now.getFullYear() - 1);
+						if (created < yearAgo) return false;
+					}
+				}
+				return true;
+			});
+		}
+
 		async function loadUsers() {
 			const { data } = await supabase.from('profiles').select('id, full_name, username');
 			if (data) {
 				data.forEach(profile => {
+					const name = profile.full_name || profile.username;
+					// backlog modal assignee
 					const option = document.createElement('option');
 					option.value = profile.id;
-					option.textContent = profile.full_name || profile.username;
+					option.textContent = name;
 					userSelect.appendChild(option);
+					// person filter
+					const opt2 = document.createElement('option');
+					opt2.value = profile.id;
+					opt2.textContent = name;
+					filterPerson.appendChild(opt2);
 				});
 			}
 		}
+
+		let hoursMap: Record<string, number> = {};
 
 		async function loadItems() {
 			if (!container) return;
@@ -166,11 +303,19 @@ import AppLayout from '../layouts/AppLayout.astro';
 				query = query.eq('status', currentStatus);
 			}
 
-			const { data, error } = await query;
+			const [{ data, error }, { data: hoursData }] = await Promise.all([
+				query,
+				supabase.from('time_entries').select('feature_id, hours').not('feature_id', 'is', null),
+			]);
 
 			if (error) {
 				container.innerHTML = `<div class="empty-state"><p>Error: ${error.message}</p></div>`;
 				return;
+			}
+
+			hoursMap = {};
+			for (const row of (hoursData || [])) {
+				hoursMap[row.feature_id] = (hoursMap[row.feature_id] || 0) + Number(row.hours);
 			}
 
 			if (!data || data.length === 0) {
@@ -183,12 +328,27 @@ import AppLayout from '../layouts/AppLayout.astro';
 		}
 
 		function renderItems(items: any[]) {
-			container!.innerHTML = items.map(f => {
+			const filtered = getFilteredItems(items);
+
+			if (filtered.length === 0) {
+				container!.innerHTML = `<div class="empty-state"><p>Geen items gevonden voor je zoekopdracht.</p></div>`;
+				return;
+			}
+
+			container!.innerHTML = filtered.map(f => {
 				const assignee = f.assignee;
 				const assigneeName = assignee ? (assignee.full_name || assignee.username) : 'Unassigned';
-				const assigneeAvatar = assignee?.avatar_url || `https://ui-avatars.com/api/?name=${assigneeName}&background=1c1917&color=c5a059`;
+				const assigneeAvatar = assignee?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(assigneeName)}&background=1c1917&color=c5a059`;
 				const category = f.category || 'feature';
 				const priority = f.priority || 'medium';
+				const totalHours = hoursMap[f.id] || 0;
+				const fmt = (h: number) => h % 1 === 0 ? String(h) : h.toFixed(1);
+				const hoursLabel = totalHours > 0
+					? `<button class="hours-chip open-hours-drawer" data-id="${f.id}" data-title="${f.title}" title="Bekijk uren">
+							<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+							${fmt(totalHours)}h
+						</button>`
+					: '';
 
 				return `
 					<div class="list-item" data-id="${f.id}">
@@ -206,6 +366,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 								<div class="title-row">
 									<h3 class="item-title">${f.title}</h3>
 									<span class="category-badge category-${category}">${category}</span>
+									${hoursLabel}
 								</div>
 								<p class="item-desc">${f.description || 'No description provided.'}</p>
 							</div>
@@ -220,6 +381,9 @@ import AppLayout from '../layouts/AppLayout.astro';
 							<span class="date">${new Date(f.created_at).toLocaleDateString()}</span>
 						</div>
 						<div class="col-actions">
+							<button class="btn-icon log-hours-btn" title="Log hours" data-id="${f.id}" data-title="${f.title}">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+							</button>
 							<button class="btn-icon edit-btn" title="Edit">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
 							</button>
@@ -235,6 +399,23 @@ import AppLayout from '../layouts/AppLayout.astro';
 		}
 
 		function setupActionButtons() {
+			document.querySelectorAll('.open-hours-drawer').forEach(btn => {
+				btn.addEventListener('click', async (e) => {
+					e.stopPropagation();
+					const id    = (btn as HTMLElement).dataset.id!;
+					const title = (btn as HTMLElement).dataset.title!;
+					await openFeatureHoursDrawer(id, title);
+				});
+			});
+
+			document.querySelectorAll('.log-hours-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					const id    = (btn as HTMLElement).dataset.id!;
+					const title = (btn as HTMLElement).dataset.title!;
+					await openHoursModal(id, title);
+				});
+			});
+
 			document.querySelectorAll('.edit-btn').forEach(btn => {
 				btn.addEventListener('click', (e) => {
 					const id = (e.currentTarget as HTMLElement).closest('.list-item')?.getAttribute('data-id');
@@ -255,7 +436,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 			});
 		}
 
-		function openModal(item = null) {
+		function openModal(item: any = null) {
 			if (item) {
 				modalTitleEl!.innerHTML = 'Edit <span class="gold-text">Item</span>';
 				submitBtn!.textContent = 'Update Item';
@@ -282,6 +463,44 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 		openModalBtn?.addEventListener('click', () => openModal());
 		cancelBtn?.addEventListener('click', closeModal);
+
+		// Filters toggle
+		const filtersToggle = document.getElementById('filters-toggle')!;
+		const filtersPanel = document.getElementById('filters-panel')!;
+		const activeFilterCount = document.getElementById('active-filter-count')!;
+
+		filtersToggle.addEventListener('click', () => {
+			const open = filtersPanel.classList.toggle('open');
+			filtersToggle.classList.toggle('active', open);
+		});
+
+		function updateFilterBadge() {
+			let count = 0;
+			if (personFilter) count++;
+			if (periodFilter) count++;
+			if (currentSort !== 'date') count++;
+			activeFilterCount.textContent = String(count);
+			activeFilterCount.style.display = count > 0 ? 'flex' : 'none';
+			filtersToggle.classList.toggle('has-filters', count > 0);
+		}
+
+		// Search + filter listeners
+		searchInput?.addEventListener('input', () => {
+			searchQuery = searchInput.value.toLowerCase();
+			renderItems(sortItems(cachedItems));
+		});
+
+		filterPerson?.addEventListener('change', () => {
+			personFilter = filterPerson.value;
+			updateFilterBadge();
+			renderItems(sortItems(cachedItems));
+		});
+
+		filterPeriod?.addEventListener('change', () => {
+			periodFilter = filterPeriod.value;
+			updateFilterBadge();
+			renderItems(sortItems(cachedItems));
+		});
 
 		form?.addEventListener('submit', async (e) => {
 			e.preventDefault();
@@ -372,8 +591,191 @@ import AppLayout from '../layouts/AppLayout.astro';
 				sortBtns.forEach(b => b.classList.remove('active'));
 				btn.classList.add('active');
 				currentSort = (btn as HTMLButtonElement).dataset.sort || 'date';
+				updateFilterBadge();
 				renderItems(sortItems(cachedItems));
 			});
+		});
+
+		// ── Feature Hours Drawer ──────────────────────────────────────────────
+		function closeDrawer() {
+			hoursDrawer.classList.remove('active');
+			drawerOverlay.classList.remove('active');
+		}
+
+		drawerOverlay.addEventListener('click', closeDrawer);
+		document.getElementById('close-drawer-btn')?.addEventListener('click', closeDrawer);
+
+		async function openFeatureHoursDrawer(featureId: string, featureTitle: string) {
+			drawerFeatureId = featureId;
+			document.getElementById('drawer-feature-title')!.textContent = featureTitle;
+			document.getElementById('drawer-body')!.innerHTML = '<div class="drawer-loading">Uren laden...</div>';
+			drawerOverlay.classList.add('active');
+			hoursDrawer.classList.add('active');
+
+			const { data, error } = await supabase
+				.from('time_entries')
+				.select('*, profile:profiles!time_entries_profile_fkey(full_name, username, avatar_url)')
+				.eq('feature_id', featureId)
+				.order('date', { ascending: false });
+
+			if (error || !data || data.length === 0) {
+				document.getElementById('drawer-body')!.innerHTML = '<div class="drawer-empty">Nog geen uren geregistreerd voor deze feature.</div>';
+				return;
+			}
+
+			const total = data.reduce((sum, e) => sum + Number(e.hours), 0);
+			const byPerson: Record<string, { name: string; hours: number; avatar: string }> = {};
+			for (const e of data) {
+				const uid = e.user_id;
+				const name = e.profile?.full_name || e.profile?.username || 'Onbekend';
+				const avatar = e.profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+				if (!byPerson[uid]) byPerson[uid] = { name, hours: 0, avatar };
+				byPerson[uid].hours += Number(e.hours);
+			}
+
+			const personsSorted = Object.values(byPerson).sort((a, b) => b.hours - a.hours);
+			const maxHours = personsSorted[0]?.hours || 1;
+			const fmt = (h: number) => h % 1 === 0 ? String(h) : h.toFixed(1);
+
+			document.getElementById('drawer-body')!.innerHTML = `
+				<div class="drawer-total">
+					<span class="drawer-total-num">${fmt(total)}</span>
+					<span class="drawer-total-label">uur totaal</span>
+				</div>
+
+				<div class="drawer-section-label">Per persoon</div>
+				<div class="drawer-persons">
+					${personsSorted.map(p => `
+						<div class="drawer-person">
+							<img src="${p.avatar}" class="drawer-avatar" />
+							<div class="drawer-person-info">
+								<div class="drawer-person-top">
+									<span class="drawer-person-name">${p.name}</span>
+									<span class="drawer-person-hours">${fmt(p.hours)}u</span>
+								</div>
+								<div class="drawer-bar-wrap">
+									<div class="drawer-bar" style="width: ${(p.hours / maxHours * 100).toFixed(1)}%"></div>
+								</div>
+							</div>
+						</div>
+					`).join('')}
+				</div>
+
+				<div class="drawer-section-label">Tijdlijn</div>
+				<div class="drawer-timeline">
+					${data.map(e => {
+						const name = e.profile?.full_name || e.profile?.username || 'Onbekend';
+						const avatar = e.profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+						const dateStr = new Date(e.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+						return `
+							<div class="drawer-entry">
+								<img src="${avatar}" class="drawer-avatar" />
+								<div class="drawer-entry-info">
+									<div class="drawer-entry-header">
+										<span class="drawer-entry-name">${name}</span>
+										<span class="drawer-entry-hrs">${fmt(Number(e.hours))}u</span>
+									</div>
+									<div class="drawer-entry-title">${e.title}</div>
+									<div class="drawer-entry-date">${dateStr}</div>
+								</div>
+							</div>
+						`;
+					}).join('')}
+				</div>
+
+				<button class="btn-primary drawer-log-btn" id="drawer-log-hours-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+					Uren toevoegen
+				</button>
+			`;
+
+			document.getElementById('drawer-log-hours-btn')?.addEventListener('click', () => {
+				closeDrawer();
+				openHoursModal(drawerFeatureId, document.getElementById('drawer-feature-title')!.textContent || '');
+			});
+		}
+
+		// ── Hours modal ──────────────────────────────────────────────────────────
+		const hoursModal         = document.getElementById('hours-modal')!;
+		const hoursForm          = document.getElementById('hours-form') as HTMLFormElement;
+		const hoursFeatureIdEl   = document.getElementById('hours-feature-id') as HTMLInputElement;
+		const hoursPersonsCont   = document.getElementById('hours-persons-container')!;
+
+		let hoursProfiles: any[] = [];
+
+		async function loadHoursProfiles() {
+			const { data } = await supabase.from('profiles').select('id, full_name, username').order('full_name');
+			hoursProfiles = data || [];
+		}
+
+		function buildHoursPersonRow(userId = '') {
+			const row = document.createElement('div');
+			row.className = 'person-row';
+			row.innerHTML = `
+				<select class="person-select" required>
+					<option value="">Selecteer persoon</option>
+					${hoursProfiles.map(p => `<option value="${p.id}" ${p.id === userId ? 'selected' : ''}>${p.full_name || p.username || 'Onbekend'}</option>`).join('')}
+				</select>
+				<div class="person-hours-wrap">
+					<input type="number" class="person-hours" min="0.25" max="24" step="0.25" placeholder="uren" required />
+					<span class="hours-unit">u</span>
+				</div>
+				<button type="button" class="remove-person-btn btn-icon" title="Verwijderen">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+				</button>
+			`;
+			row.querySelector('.remove-person-btn')!.addEventListener('click', () => {
+				if (hoursPersonsCont.querySelectorAll('.person-row').length > 1) row.remove();
+			});
+			return row;
+		}
+
+		document.getElementById('hours-add-person-btn')?.addEventListener('click', () => {
+			hoursPersonsCont.appendChild(buildHoursPersonRow());
+		});
+
+		async function openHoursModal(featureId: string, featureTitle: string) {
+			await loadHoursProfiles();
+			hoursForm.reset();
+			hoursFeatureIdEl.value = featureId;
+			const chip = document.getElementById('hours-context-chip')!;
+			document.getElementById('hours-context-text')!.textContent = featureTitle;
+			chip.style.display = 'inline-flex';
+			(document.getElementById('hours-date') as HTMLInputElement).value = new Date().toISOString().split('T')[0];
+
+			hoursPersonsCont.innerHTML = '';
+			const { data: { session } } = await supabase.auth.getSession();
+			hoursPersonsCont.appendChild(buildHoursPersonRow(session?.user.id || ''));
+
+			hoursModal.classList.add('active');
+		}
+
+		document.getElementById('hours-cancel-btn')?.addEventListener('click', () => hoursModal.classList.remove('active'));
+		hoursModal.addEventListener('click', e => { if (e.target === hoursModal) hoursModal.classList.remove('active'); });
+
+		hoursForm.addEventListener('submit', async e => {
+			e.preventDefault();
+			const { data: { session } } = await supabase.auth.getSession();
+			if (!session) return;
+			const fd = new FormData(hoursForm);
+			const title   = fd.get('title') as string;
+			const desc    = (fd.get('description') as string) || null;
+			const date    = fd.get('date') as string;
+			const featId  = (fd.get('feature_id') as string) || null;
+
+			const rows = hoursPersonsCont.querySelectorAll('.person-row');
+			const entries: any[] = [];
+			for (const row of rows) {
+				const uid = (row.querySelector('.person-select') as HTMLSelectElement).value;
+				const hrs = parseFloat((row.querySelector('.person-hours') as HTMLInputElement).value);
+				if (!uid || isNaN(hrs)) continue;
+				entries.push({ user_id: uid, logged_by: session.user.id, title, description: desc, hours: hrs, date, feature_id: featId });
+			}
+			if (entries.length === 0) return;
+			const { error } = await supabase.from('time_entries').insert(entries);
+			if (error) { alert(error.message); return; }
+			hoursModal.classList.remove('active');
+			loadItems();
 		});
 
 		loadUsers();
@@ -382,27 +784,100 @@ import AppLayout from '../layouts/AppLayout.astro';
 </AppLayout>
 
 <style is:global>
-	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; }
+	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
 	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
 	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
-	.list-filters { padding: 1rem 1.25rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+	/* Filter bar */
+	.list-filters { padding: 0; margin-bottom: 2rem; overflow: hidden; }
+
+	.filters-top {
+		display: flex; align-items: center; gap: 1rem;
+		padding: 0.85rem 1.25rem; flex-wrap: wrap;
+		border-bottom: 1px solid transparent; transition: border-color 0.2s;
+	}
+	.filters-panel.open ~ * .filters-top,
+	.list-filters:has(.filters-panel.open) .filters-top { border-bottom-color: var(--color-border); }
+
+	/* Integrated search */
+	.search-wrap {
+		display: flex; align-items: center; gap: 0.6rem;
+		flex: 1; min-width: 180px;
+		background: var(--color-surface); border: 1.5px solid var(--color-border);
+		border-radius: 10px; padding: 0.55rem 1rem;
+		transition: border-color 0.2s, box-shadow 0.2s;
+	}
+	.search-wrap:focus-within {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.1);
+	}
+	.search-icon { color: var(--color-primary); flex-shrink: 0; }
+	.search-wrap input {
+		flex: 1; background: transparent; border: none; outline: none;
+		color: var(--color-text); font-family: inherit; font-size: 0.9rem;
+	}
+	.search-wrap input::placeholder { color: var(--color-text-muted); }
+
+	.filters-top-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
 	.filter-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 	.filter-btn { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem 1.25rem; border-radius: 100px; font-size: 0.85rem; cursor: pointer; transition: all 0.3s; }
 	.filter-btn:hover { border-color: var(--color-primary); color: var(--color-text); }
 	.filter-btn.active { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
 
+	/* Filters toggle button */
+	.filters-toggle-btn {
+		display: inline-flex; align-items: center; gap: 0.45rem;
+		background: var(--color-surface); border: 1px solid var(--color-border);
+		color: var(--color-text-muted); padding: 0.5rem 1rem;
+		border-radius: 100px; font-size: 0.85rem; font-family: inherit;
+		cursor: pointer; transition: all 0.2s; white-space: nowrap;
+	}
+	.filters-toggle-btn:hover,
+	.filters-toggle-btn.active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-dim); }
+	.filters-toggle-btn.has-filters { border-color: var(--color-primary); color: var(--color-primary); }
+
+	.filter-badge {
+		display: flex; align-items: center; justify-content: center;
+		width: 18px; height: 18px; border-radius: 50%;
+		background: var(--color-primary); color: var(--color-bg);
+		font-size: 0.65rem; font-weight: 700; line-height: 1;
+	}
+
+	/* Collapsible filters panel */
+	.filters-panel {
+		display: grid; grid-template-rows: 0fr;
+		transition: grid-template-rows 0.25s ease;
+	}
+	.filters-panel.open { grid-template-rows: 1fr; }
+	.filters-panel-row {
+		overflow: hidden; display: flex; gap: 2rem; flex-wrap: wrap;
+		padding: 0 1.25rem;
+		transition: padding 0.25s ease;
+	}
+	.filters-panel.open .filters-panel-row { padding: 1.25rem 1.25rem; }
+
+	.filter-control { display: flex; flex-direction: column; gap: 0.5rem; }
+	.filter-control-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
+
 	.sort-group { display: flex; align-items: center; gap: 0.4rem; }
-	.sort-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); font-weight: 700; margin-right: 0.25rem; }
-	.sort-btn { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.4rem 0.9rem; border-radius: 100px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+	.sort-btn { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.4rem 0.9rem; border-radius: 100px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; font-family: inherit; }
 	.sort-btn:hover { border-color: var(--color-primary); color: var(--color-text); }
 	.sort-btn.active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-dim); }
 
+	.filter-select {
+		background: var(--color-surface); border: 1px solid var(--color-border);
+		color: var(--color-text); padding: 0.45rem 0.9rem; border-radius: 8px;
+		font-family: inherit; font-size: 0.85rem; cursor: pointer; outline: none;
+		transition: border-color 0.2s;
+	}
+	.filter-select:focus { border-color: var(--color-primary); }
+
 	.list-wrapper { overflow: hidden; }
-	.list-header { display: grid; grid-template-columns: 130px 100px 1fr 170px 110px 90px; padding: 1.5rem 2rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
+	.list-header { display: grid; grid-template-columns: 130px 100px 1fr 170px 110px 120px; padding: 1.5rem 2rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
 
 	.list-items { min-height: 200px; }
-	.list-item { display: grid; grid-template-columns: 130px 100px 1fr 170px 110px 90px; padding: 1.25rem 2rem; border-bottom: 1px solid var(--color-border); align-items: center; transition: background 0.2s; }
+	.list-item { display: grid; grid-template-columns: 130px 100px 1fr 170px 110px 120px; padding: 1.25rem 2rem; border-bottom: 1px solid var(--color-border); align-items: center; transition: background 0.2s; }
 	.list-item:last-child { border-bottom: none; }
 	.list-item:hover { background: rgba(197, 160, 89, 0.03); }
 
@@ -425,10 +900,22 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	.date { font-size: 0.85rem; color: var(--color-text-muted); }
 
-	.col-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
-	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+	.col-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.45rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
 	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
 	.delete-btn:hover { border-color: #fecaca; color: #fecaca; }
+
+	/* Hours chip — clickable button */
+	.hours-chip {
+		display: inline-flex; align-items: center; gap: 0.3rem;
+		font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em;
+		padding: 0.2rem 0.55rem; border-radius: 100px;
+		background: rgba(197, 160, 89, 0.12); color: var(--color-primary);
+		border: 1px solid rgba(197, 160, 89, 0.25);
+		flex-shrink: 0; cursor: pointer; transition: background 0.2s;
+		font-family: inherit;
+	}
+	.hours-chip:hover { background: rgba(197, 160, 89, 0.22); }
 
 	.status-badge { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; padding: 0.25rem 0.75rem; border-radius: 100px; display: inline-block; }
 	.status-pending { background: #4b5563; color: white; }
@@ -438,17 +925,147 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	.loading-state, .empty-state { padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
 
-	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
+	/* ── Hours Drawer ── */
+	.drawer-overlay {
+		position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+		backdrop-filter: blur(4px); z-index: 900; display: none;
+	}
+	.drawer-overlay.active { display: block; }
+
+	.hours-drawer {
+		position: fixed; top: 0; right: -100%; width: min(520px, 100vw);
+		height: 100vh; z-index: 901; transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+		padding: 1.5rem; box-sizing: border-box;
+	}
+	.hours-drawer.active { right: 0; }
+	.drawer-inner { height: 100%; padding: 2rem 2.5rem; border-radius: 16px; display: flex; flex-direction: column; overflow-y: auto; box-sizing: border-box; }
+
+	.drawer-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-shrink: 0; }
+	.drawer-header h3 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+	.drawer-subtitle { font-size: 0.85rem; color: var(--color-text-muted); margin: 0; }
+	.close-btn { flex-shrink: 0; }
+
+	.drawer-body { flex: 1; overflow-y: auto; }
+
+	.drawer-total {
+		display: flex; align-items: baseline; gap: 0.5rem;
+		margin-bottom: 2rem; padding: 1.5rem; background: var(--color-surface);
+		border: 1px solid var(--color-border); border-radius: 12px;
+	}
+	.drawer-total-num { font-size: 3rem; font-weight: 700; color: var(--color-primary); font-family: serif; line-height: 1; }
+	.drawer-total-label { font-size: 0.85rem; color: var(--color-text-muted); }
+
+	.drawer-section-label {
+		font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em;
+		color: var(--color-text-muted); font-weight: 700;
+		margin: 1.5rem 0 1rem; padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.drawer-persons { display: flex; flex-direction: column; gap: 0.75rem; }
+	.drawer-person { display: flex; align-items: center; gap: 0.75rem; }
+	.drawer-avatar { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--color-border); flex-shrink: 0; object-fit: cover; }
+	.drawer-person-info { flex: 1; min-width: 0; }
+	.drawer-person-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+	.drawer-person-name { font-size: 0.9rem; font-weight: 600; }
+	.drawer-person-hours { font-size: 0.8rem; color: var(--color-primary); font-weight: 700; }
+	.drawer-bar-wrap { height: 4px; background: var(--color-border); border-radius: 100px; overflow: hidden; }
+	.drawer-bar { height: 100%; background: var(--color-primary); border-radius: 100px; }
+
+	.drawer-timeline { display: flex; flex-direction: column; gap: 0.75rem; }
+	.drawer-entry { display: flex; gap: 0.75rem; padding: 0.85rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; }
+	.drawer-entry-info { flex: 1; min-width: 0; }
+	.drawer-entry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
+	.drawer-entry-name { font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); }
+	.drawer-entry-hrs { font-size: 0.8rem; color: var(--color-primary); font-weight: 700; }
+	.drawer-entry-title { font-size: 0.9rem; font-weight: 500; margin-bottom: 0.2rem; }
+	.drawer-entry-date { font-size: 0.75rem; color: var(--color-text-muted); }
+
+	.drawer-loading, .drawer-empty { padding: 3rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
+
+	.drawer-log-btn {
+		display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+		margin-top: 2rem; width: 100%; padding: 0.9rem; border-radius: 10px;
+		font-size: 0.9rem; font-weight: 600;
+	}
+
+	/* ── Multi-person rows ── */
+	.persons-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); font-weight: 600; margin: 0.25rem 0 0.75rem; }
+	.persons-container { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.75rem; }
+	.person-row { display: grid; grid-template-columns: 1fr 110px 36px; gap: 0.6rem; align-items: center; }
+	.person-row select, .person-row input { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text); border-radius: 10px; font-family: inherit; font-size: 0.9rem; padding: 0.75rem 0.9rem; width: 100%; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s; }
+	.person-row select:focus, .person-row input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(197,160,89,0.1); }
+	.person-hours-wrap { position: relative; }
+	.person-hours-wrap input { padding-right: 2rem; }
+	.hours-unit { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--color-text-muted); pointer-events: none; }
+	.remove-person-btn:hover { border-color: #fecaca !important; color: #fecaca !important; }
+	.add-person-btn { display: inline-flex; align-items: center; gap: 0.5rem; background: transparent; border: 1px dashed var(--color-border); color: var(--color-text-muted); padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; width: 100%; justify-content: center; margin-bottom: 1.5rem; }
+	.add-person-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+	/* ── Modals ── */
+	.modal-overlay {
+		position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+		backdrop-filter: blur(12px); display: none; align-items: center;
+		justify-content: center; z-index: 1000; padding: 2rem;
+	}
 	.modal-overlay.active { display: flex; }
-	.modal-card { width: 100%; max-width: 520px; padding: 3rem; }
+	.modal-card {
+		width: 100%; max-width: 560px; padding: 2.5rem 3rem 3rem;
+		border-radius: 16px; max-height: 92vh; overflow-y: auto;
+	}
+	.modal-card h2 { font-size: 2rem; margin-bottom: 0.75rem; }
 
-	.form-group { margin-bottom: 1.5rem; }
-	.form-group label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.5rem; letter-spacing: 0.1em; font-weight: 700; }
-	.form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem 1rem; color: var(--color-text); font-family: inherit; outline: none; transition: border-color 0.2s; }
-	.form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--color-primary); }
+	.hours-context-chip {
+		display: inline-flex; align-items: center; gap: 0.5rem;
+		background: rgba(197, 160, 89, 0.1); border: 1px solid rgba(197, 160, 89, 0.25);
+		color: var(--color-primary); font-size: 0.78rem; font-weight: 600;
+		padding: 0.4rem 0.9rem; border-radius: 100px;
+		margin-bottom: 2rem;
+	}
+	.hours-context-chip svg { flex-shrink: 0; opacity: 0.8; }
 
-	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+	.form-section-label {
+		font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em;
+		color: var(--color-text-muted); font-weight: 700;
+		margin: 2rem 0 1rem; padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.form-section-label:first-of-type { margin-top: 0; }
+
+	.form-group { margin-bottom: 1.25rem; }
+	.form-group label {
+		display: block; font-size: 0.7rem; text-transform: uppercase;
+		color: var(--color-text-muted); margin-bottom: 0.5rem;
+		letter-spacing: 0.08em; font-weight: 600;
+	}
+	.form-group input,
+	.form-group textarea,
+	.form-group select {
+		width: 100%; background: var(--color-surface);
+		border: 1px solid var(--color-border); border-radius: 10px;
+		padding: 0.85rem 1.1rem; color: var(--color-text);
+		font-family: inherit; font-size: 0.95rem;
+		outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+		box-sizing: border-box;
+	}
+	.form-group input:focus,
+	.form-group textarea:focus,
+	.form-group select:focus {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.12);
+	}
+	.form-group textarea { resize: vertical; min-height: 80px; }
+
+	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+	.modal-actions {
+		display: flex; gap: 1rem; margin-top: 2.5rem;
+		padding-top: 1.5rem; border-top: 1px solid var(--color-border);
+	}
+	.modal-actions .btn-primary,
+	.modal-actions .btn-secondary {
+		flex: 1; padding: 0.85rem 1rem; border-radius: 10px;
+		font-size: 0.9rem; font-weight: 600; text-align: center;
+	}
 
 	@media (max-width: 900px) {
 		.list-header { display: none; }
@@ -456,6 +1073,12 @@ import AppLayout from '../layouts/AppLayout.astro';
 		.col-actions { justify-content: flex-start; }
 		.col-status, .col-priority, .col-title, .col-assignee, .col-date, .col-actions { padding: 0; }
 		.col-title { padding-right: 0; }
-		.list-filters { flex-direction: column; align-items: flex-start; }
+		.filters-top { flex-direction: column; align-items: flex-start; }
+		.filters-top-right { flex-direction: column; align-items: flex-start; }
+		.filters-panel-row { flex-direction: column; }
+		.form-row { grid-template-columns: 1fr; }
+		.modal-card { padding: 2rem 1.5rem; }
+		.hours-drawer { padding: 0; }
+		.drawer-inner { border-radius: 0; }
 	}
 </style>

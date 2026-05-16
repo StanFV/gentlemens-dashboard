@@ -7,6 +7,9 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	// State
 	let editingProjectId: string | null = null;
+	let allProjects: any[] = [];
+	let searchQuery = '';
+	let drawerProjectId = '';
 
 	// UI Elements
 	const createBtn = document.getElementById('create-project-btn');
@@ -16,6 +19,15 @@ import AppLayout from '../layouts/AppLayout.astro';
 	const cancelBtn = document.getElementById('cancel-btn');
 	const projectForm = document.getElementById('project-form') as HTMLFormElement;
 	const container = document.getElementById('projects-container');
+	const searchInput = document.getElementById('project-search') as HTMLInputElement;
+	const hoursDrawer = document.getElementById('project-hours-drawer')!;
+	const drawerOverlay = document.getElementById('drawer-overlay')!;
+
+	// Search
+	searchInput?.addEventListener('input', () => {
+		searchQuery = searchInput.value.toLowerCase();
+		renderProjects();
+	});
 
 	// Toggle Modal
 	function openModal(editId: string | null = null) {
@@ -71,7 +83,26 @@ import AppLayout from '../layouts/AppLayout.astro';
 			return;
 		}
 
-		container.innerHTML = projects.map(project => `
+		allProjects = projects;
+		renderProjects();
+	}
+
+	function renderProjects() {
+		if (!container) return;
+
+		const filtered = searchQuery
+			? allProjects.filter(p =>
+				p.title.toLowerCase().includes(searchQuery) ||
+				(p.client || '').toLowerCase().includes(searchQuery)
+			)
+			: allProjects;
+
+		if (filtered.length === 0) {
+			container.innerHTML = `<div class="empty-state card"><p>Geen projecten gevonden voor "${searchInput.value}".</p></div>`;
+			return;
+		}
+
+		container.innerHTML = filtered.map(project => `
 			<div class="project-card card" data-id="${project.id}">
 				<div class="p-header">
 					<div class="p-main-info">
@@ -80,6 +111,12 @@ import AppLayout from '../layouts/AppLayout.astro';
 						<p class="p-client">Client: <span>${project.client || 'Internal'}</span></p>
 					</div>
 					<div class="p-actions">
+						<button class="btn-icon view-hours-project" title="Bekijk uren" data-id="${project.id}" data-title="${project.title}">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+						</button>
+						<button class="btn-icon log-hours-project" title="Log hours" data-id="${project.id}" data-title="${project.title}">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+						</button>
 						<button class="btn-icon edit-project" title="Edit">
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
 						</button>
@@ -115,11 +152,209 @@ import AppLayout from '../layouts/AppLayout.astro';
 			</div>
 		`).join('');
 
-		// Re-attach event listeners
 		setupActionButtons();
 	}
 
+	// ── Hours Drawer ──────────────────────────────────────────────────────────
+	function closeDrawer() {
+		hoursDrawer.classList.remove('active');
+		drawerOverlay.classList.remove('active');
+	}
+
+	drawerOverlay.addEventListener('click', closeDrawer);
+	document.getElementById('close-drawer-btn')?.addEventListener('click', closeDrawer);
+
+	async function openProjectHoursDrawer(projectId: string, projectTitle: string) {
+		drawerProjectId = projectId;
+		document.getElementById('drawer-project-title')!.textContent = projectTitle;
+		document.getElementById('drawer-body')!.innerHTML = '<div class="drawer-loading">Uren laden...</div>';
+		drawerOverlay.classList.add('active');
+		hoursDrawer.classList.add('active');
+
+		const { data, error } = await supabase
+			.from('time_entries')
+			.select('*, profile:profiles!time_entries_profile_fkey(full_name, username, avatar_url)')
+			.eq('project_id', projectId)
+			.order('date', { ascending: false });
+
+		if (error || !data || data.length === 0) {
+			document.getElementById('drawer-body')!.innerHTML = '<div class="drawer-empty">Nog geen uren geregistreerd voor dit project.</div>';
+			return;
+		}
+
+		const total = data.reduce((sum, e) => sum + Number(e.hours), 0);
+		const byPerson: Record<string, { name: string; hours: number; avatar: string }> = {};
+		for (const e of data) {
+			const uid = e.user_id;
+			const name = e.profile?.full_name || e.profile?.username || 'Onbekend';
+			const avatar = e.profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+			if (!byPerson[uid]) byPerson[uid] = { name, hours: 0, avatar };
+			byPerson[uid].hours += Number(e.hours);
+		}
+
+		const personsSorted = Object.values(byPerson).sort((a, b) => b.hours - a.hours);
+		const maxHours = personsSorted[0]?.hours || 1;
+
+		const fmt = (h: number) => h % 1 === 0 ? String(h) : h.toFixed(1);
+
+		document.getElementById('drawer-body')!.innerHTML = `
+			<div class="drawer-total">
+				<span class="drawer-total-num">${fmt(total)}</span>
+				<span class="drawer-total-label">uur totaal</span>
+			</div>
+
+			<div class="drawer-section-label">Per persoon</div>
+			<div class="drawer-persons">
+				${personsSorted.map(p => `
+					<div class="drawer-person">
+						<img src="${p.avatar}" class="drawer-avatar" />
+						<div class="drawer-person-info">
+							<div class="drawer-person-top">
+								<span class="drawer-person-name">${p.name}</span>
+								<span class="drawer-person-hours">${fmt(p.hours)}u</span>
+							</div>
+							<div class="drawer-bar-wrap">
+								<div class="drawer-bar" style="width: ${(p.hours / maxHours * 100).toFixed(1)}%"></div>
+							</div>
+						</div>
+					</div>
+				`).join('')}
+			</div>
+
+			<div class="drawer-section-label">Tijdlijn</div>
+			<div class="drawer-timeline">
+				${data.map(e => {
+					const name = e.profile?.full_name || e.profile?.username || 'Onbekend';
+					const avatar = e.profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1c1917&color=c5a059`;
+					const dateStr = new Date(e.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+					return `
+						<div class="drawer-entry">
+							<img src="${avatar}" class="drawer-avatar" />
+							<div class="drawer-entry-info">
+								<div class="drawer-entry-header">
+									<span class="drawer-entry-name">${name}</span>
+									<span class="drawer-entry-hrs">${fmt(Number(e.hours))}u</span>
+								</div>
+								<div class="drawer-entry-title">${e.title}</div>
+								<div class="drawer-entry-date">${dateStr}</div>
+							</div>
+						</div>
+					`;
+				}).join('')}
+			</div>
+
+			<button class="btn-primary drawer-log-btn" id="drawer-log-hours-btn">
+				<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+				Uren toevoegen
+			</button>
+		`;
+
+		document.getElementById('drawer-log-hours-btn')?.addEventListener('click', () => {
+			closeDrawer();
+			openHoursModal(drawerProjectId, document.getElementById('drawer-project-title')!.textContent || '');
+		});
+	}
+
+	// ── Hours modal ──────────────────────────────────────────────────────────
+	const hoursModal        = document.getElementById('hours-modal')!;
+	const hoursForm         = document.getElementById('hours-form') as HTMLFormElement;
+	const hoursProjectIdEl  = document.getElementById('hours-project-id') as HTMLInputElement;
+	const hoursPersonsCont  = document.getElementById('hours-persons-container')!;
+
+	let hoursProfiles: any[] = [];
+
+	async function loadHoursProfiles() {
+		if (hoursProfiles.length > 0) return;
+		const { data } = await supabase.from('profiles').select('id, full_name, username').order('full_name');
+		hoursProfiles = data || [];
+	}
+
+	function buildHoursPersonRow(userId = '') {
+		const row = document.createElement('div');
+		row.className = 'person-row';
+		row.innerHTML = `
+			<select class="person-select" required>
+				<option value="">Selecteer persoon</option>
+				${hoursProfiles.map(p => `<option value="${p.id}" ${p.id === userId ? 'selected' : ''}>${p.full_name || p.username || 'Onbekend'}</option>`).join('')}
+			</select>
+			<div class="person-hours-wrap">
+				<input type="number" class="person-hours" min="0.25" max="24" step="0.25" placeholder="uren" required />
+				<span class="hours-unit">u</span>
+			</div>
+			<button type="button" class="remove-person-btn btn-icon" title="Verwijderen">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+			</button>
+		`;
+		row.querySelector('.remove-person-btn')!.addEventListener('click', () => {
+			if (hoursPersonsCont.querySelectorAll('.person-row').length > 1) row.remove();
+		});
+		return row;
+	}
+
+	document.getElementById('hours-add-person-btn')?.addEventListener('click', () => {
+		hoursPersonsCont.appendChild(buildHoursPersonRow());
+	});
+
+	async function openHoursModal(projectId: string, projectTitle: string) {
+		await loadHoursProfiles();
+		hoursForm.reset();
+		hoursProjectIdEl.value = projectId;
+		const chip = document.getElementById('hours-context-chip')!;
+		document.getElementById('hours-context-text')!.textContent = projectTitle;
+		chip.style.display = 'inline-flex';
+		(document.getElementById('hours-date') as HTMLInputElement).value = new Date().toISOString().split('T')[0];
+
+		hoursPersonsCont.innerHTML = '';
+		const { data: { session } } = await supabase.auth.getSession();
+		hoursPersonsCont.appendChild(buildHoursPersonRow(session?.user.id || ''));
+
+		hoursModal.classList.add('active');
+	}
+
+	document.getElementById('hours-cancel-btn')?.addEventListener('click', () => hoursModal.classList.remove('active'));
+	hoursModal.addEventListener('click', e => { if (e.target === hoursModal) hoursModal.classList.remove('active'); });
+
+	hoursForm.addEventListener('submit', async e => {
+		e.preventDefault();
+		const { data: { session } } = await supabase.auth.getSession();
+		if (!session) return;
+		const fd      = new FormData(hoursForm);
+		const title   = fd.get('title') as string;
+		const desc    = (fd.get('description') as string) || null;
+		const date    = fd.get('date') as string;
+		const projId  = (fd.get('project_id') as string) || null;
+
+		const rows = hoursPersonsCont.querySelectorAll('.person-row');
+		const entries: any[] = [];
+		for (const row of rows) {
+			const uid = (row.querySelector('.person-select') as HTMLSelectElement).value;
+			const hrs = parseFloat((row.querySelector('.person-hours') as HTMLInputElement).value);
+			if (!uid || isNaN(hrs)) continue;
+			entries.push({ user_id: uid, logged_by: session.user.id, title, description: desc, hours: hrs, date, project_id: projId });
+		}
+		if (entries.length === 0) return;
+		const { error } = await supabase.from('time_entries').insert(entries);
+		if (error) { alert(error.message); return; }
+		hoursModal.classList.remove('active');
+	});
+
 	function setupActionButtons() {
+		document.querySelectorAll('.view-hours-project').forEach(btn => {
+			btn.addEventListener('click', async () => {
+				const id    = (btn as HTMLElement).dataset.id!;
+				const title = (btn as HTMLElement).dataset.title!;
+				await openProjectHoursDrawer(id, title);
+			});
+		});
+
+		document.querySelectorAll('.log-hours-project').forEach(btn => {
+			btn.addEventListener('click', async () => {
+				const id    = (btn as HTMLElement).dataset.id!;
+				const title = (btn as HTMLElement).dataset.title!;
+				await openHoursModal(id, title);
+			});
+		});
+
 		document.querySelectorAll('.edit-project').forEach(btn => {
 			btn.addEventListener('click', (e) => {
 				const id = (e.currentTarget as HTMLElement).closest('.project-card')?.getAttribute('data-id');
@@ -144,7 +379,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 		e.preventDefault();
 		const formData = new FormData(projectForm);
 		const { data: { session } } = await supabase.auth.getSession();
-		
+
 		const projectData = {
 			title: formData.get('title'),
 			client: formData.get('client'),
@@ -157,7 +392,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 		let result;
 		if (editingProjectId) {
 			result = await supabase.from('projects').update(projectData).eq('id', editingProjectId);
-			
+
 			if (!result.error) {
 				await supabase.from('notifications').insert({
 					user_id: session?.user.id,
@@ -169,7 +404,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 			}
 		} else {
 			result = await supabase.from('projects').insert([projectData]);
-			
+
 			if (!result.error) {
 				await supabase.from('notifications').insert({
 					user_id: session?.user.id,
@@ -201,13 +436,77 @@ import AppLayout from '../layouts/AppLayout.astro';
 		<button id="create-project-btn" class="btn-primary">+ Initiate New Project</button>
 	</header>
 
+	<div class="list-filters card">
+		<div class="filters-top">
+			<div class="search-wrap">
+				<svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+				<input type="text" id="project-search" placeholder="Zoeken op projectnaam, klant..." />
+			</div>
+		</div>
+	</div>
+
 	<div id="projects-container" class="projects-grid">
 		<div class="empty-state card">
 			<p>Loading the projects vault...</p>
 		</div>
 	</div>
 
-	<!-- Modal -->
+	<!-- Drawer overlay -->
+	<div id="drawer-overlay" class="drawer-overlay"></div>
+
+	<!-- Per-project hours drawer -->
+	<div id="project-hours-drawer" class="hours-drawer">
+		<div class="drawer-inner card">
+			<div class="drawer-header">
+				<div>
+					<h3 class="serif">Uren <span class="gold-text">overzicht</span></h3>
+					<p id="drawer-project-title" class="drawer-subtitle"></p>
+				</div>
+				<button id="close-drawer-btn" class="btn-icon close-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+				</button>
+			</div>
+			<div id="drawer-body" class="drawer-body"></div>
+		</div>
+	</div>
+
+	<!-- Hours Modal -->
+	<div id="hours-modal" class="modal-overlay">
+		<div class="modal-card card">
+			<h2 class="serif">Log <span class="gold-text">Uren</span></h2>
+			<div id="hours-context-chip" class="hours-context-chip" style="display:none;">
+				<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+				<span id="hours-context-text"></span>
+			</div>
+			<form id="hours-form">
+				<input type="hidden" id="hours-project-id" name="project_id" />
+				<div class="form-group">
+					<label for="hours-title">Wat heb je gedaan? *</label>
+					<input type="text" id="hours-title" name="title" required placeholder="Korte omschrijving van je werkzaamheden" />
+				</div>
+				<div class="form-group">
+					<label for="hours-description">Toelichting</label>
+					<textarea id="hours-description" name="description" rows="2" placeholder="Optionele uitleg..."></textarea>
+				</div>
+				<div class="form-group">
+					<label for="hours-date">Datum *</label>
+					<input type="date" id="hours-date" name="date" required />
+				</div>
+				<p class="persons-label">Voor wie schrijf je uren?</p>
+				<div id="hours-persons-container" class="persons-container"></div>
+				<button type="button" id="hours-add-person-btn" class="add-person-btn">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+					Persoon toevoegen
+				</button>
+				<div class="modal-actions">
+					<button type="button" id="hours-cancel-btn" class="btn-secondary">Annuleren</button>
+					<button type="submit" class="btn-primary">Uren opslaan</button>
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<!-- Project Modal -->
 	<div id="project-modal" class="modal-overlay">
 		<div class="modal-card card">
 			<h2 id="modal-title" class="serif">New <span class="gold-text">Project</span></h2>
@@ -234,7 +533,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 					<label for="files_url">Storage URL</label>
 					<input type="url" id="files_url" name="files_url" placeholder="https://..." />
 				</div>
-				
+
 				<div class="modal-actions">
 					<button type="button" id="cancel-btn" class="btn-secondary">Cancel</button>
 					<button type="submit" id="submit-btn" class="btn-primary">Initiate Project</button>
@@ -245,12 +544,34 @@ import AppLayout from '../layouts/AppLayout.astro';
 </AppLayout>
 
 <style is:global>
-	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; }
+	.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
 	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
 	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
+	/* Filter bar */
+	.list-filters { padding: 0; margin-bottom: 2rem; overflow: hidden; }
+	.filters-top { display: flex; align-items: center; gap: 1rem; padding: 0.85rem 1.25rem; flex-wrap: wrap; }
+
+	.search-wrap {
+		display: flex; align-items: center; gap: 0.6rem;
+		flex: 1; min-width: 180px;
+		background: var(--color-surface); border: 1.5px solid var(--color-border);
+		border-radius: 10px; padding: 0.55rem 1rem;
+		transition: border-color 0.2s, box-shadow 0.2s;
+	}
+	.search-wrap:focus-within {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.1);
+	}
+	.search-icon { color: var(--color-primary); flex-shrink: 0; }
+	.search-wrap input {
+		flex: 1; background: transparent; border: none; outline: none;
+		color: var(--color-text); font-family: inherit; font-size: 0.9rem;
+	}
+	.search-wrap input::placeholder { color: var(--color-text-muted); }
+
 	.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 2rem; }
-	
+
 	.empty-state { grid-column: 1 / -1; padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
 
 	.project-card { padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; transition: transform 0.3s; position: relative; }
@@ -263,7 +584,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.p-client span { color: var(--color-text); font-weight: 500; }
 
 	.p-actions { display: flex; gap: 0.5rem; }
-	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
 	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
 	.delete-project:hover { border-color: #fecaca; color: #fecaca; }
 
@@ -280,15 +601,145 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.p-fill-mini { height: 100%; background: var(--color-primary); }
 	.p-num-mini { font-size: 0.7rem; color: var(--color-text-muted); }
 
-	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
+	/* ── Hours Drawer ── */
+	.drawer-overlay {
+		position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+		backdrop-filter: blur(4px); z-index: 900; display: none;
+	}
+	.drawer-overlay.active { display: block; }
+
+	.hours-drawer {
+		position: fixed; top: 0; right: -100%; width: min(520px, 100vw);
+		height: 100vh; z-index: 901; transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+		padding: 1.5rem; box-sizing: border-box; overflow-y: auto;
+	}
+	.hours-drawer.active { right: 0; }
+	.drawer-inner { height: 100%; padding: 2rem 2.5rem; border-radius: 16px; display: flex; flex-direction: column; overflow-y: auto; box-sizing: border-box; }
+
+	.drawer-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-shrink: 0; }
+	.drawer-header h3 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+	.drawer-subtitle { font-size: 0.85rem; color: var(--color-text-muted); margin: 0; }
+	.close-btn { flex-shrink: 0; }
+
+	.drawer-body { flex: 1; overflow-y: auto; }
+
+	.drawer-total {
+		display: flex; align-items: baseline; gap: 0.5rem;
+		margin-bottom: 2rem; padding: 1.5rem; background: var(--color-surface);
+		border: 1px solid var(--color-border); border-radius: 12px;
+	}
+	.drawer-total-num { font-size: 3rem; font-weight: 700; color: var(--color-primary); font-family: serif; line-height: 1; }
+	.drawer-total-label { font-size: 0.85rem; color: var(--color-text-muted); }
+
+	.drawer-section-label {
+		font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em;
+		color: var(--color-text-muted); font-weight: 700;
+		margin: 1.5rem 0 1rem; padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.drawer-persons { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.5rem; }
+	.drawer-person { display: flex; align-items: center; gap: 0.75rem; }
+	.drawer-avatar { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--color-border); flex-shrink: 0; object-fit: cover; }
+	.drawer-person-info { flex: 1; min-width: 0; }
+	.drawer-person-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+	.drawer-person-name { font-size: 0.9rem; font-weight: 600; }
+	.drawer-person-hours { font-size: 0.8rem; color: var(--color-primary); font-weight: 700; }
+	.drawer-bar-wrap { height: 4px; background: var(--color-border); border-radius: 100px; overflow: hidden; }
+	.drawer-bar { height: 100%; background: var(--color-primary); border-radius: 100px; transition: width 0.6s ease; }
+
+	.drawer-timeline { display: flex; flex-direction: column; gap: 0.75rem; }
+	.drawer-entry { display: flex; gap: 0.75rem; padding: 0.85rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; }
+	.drawer-entry-info { flex: 1; min-width: 0; }
+	.drawer-entry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
+	.drawer-entry-name { font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); }
+	.drawer-entry-hrs { font-size: 0.8rem; color: var(--color-primary); font-weight: 700; }
+	.drawer-entry-title { font-size: 0.9rem; font-weight: 500; margin-bottom: 0.2rem; }
+	.drawer-entry-date { font-size: 0.75rem; color: var(--color-text-muted); }
+
+	.drawer-loading, .drawer-empty { padding: 3rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
+
+	.drawer-log-btn {
+		display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+		margin-top: 2rem; width: 100%; padding: 0.9rem; border-radius: 10px;
+		font-size: 0.9rem; font-weight: 600; text-align: center;
+	}
+
+	/* ── Multi-person rows ── */
+	.persons-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); font-weight: 600; margin: 0.25rem 0 0.75rem; }
+	.persons-container { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.75rem; }
+	.person-row { display: grid; grid-template-columns: 1fr 110px 36px; gap: 0.6rem; align-items: center; }
+	.person-row select, .person-row input { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text); border-radius: 10px; font-family: inherit; font-size: 0.9rem; padding: 0.75rem 0.9rem; width: 100%; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s; }
+	.person-row select:focus, .person-row input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(197,160,89,0.1); }
+	.person-hours-wrap { position: relative; }
+	.person-hours-wrap input { padding-right: 2rem; }
+	.hours-unit { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--color-text-muted); pointer-events: none; }
+	.remove-person-btn:hover { border-color: #fecaca !important; color: #fecaca !important; }
+	.add-person-btn { display: inline-flex; align-items: center; gap: 0.5rem; background: transparent; border: 1px dashed var(--color-border); color: var(--color-text-muted); padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; width: 100%; justify-content: center; margin-bottom: 1.5rem; }
+	.add-person-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+	/* ── Modals ── */
+	.modal-overlay {
+		position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+		backdrop-filter: blur(12px); display: none; align-items: center;
+		justify-content: center; z-index: 1000; padding: 2rem;
+	}
 	.modal-overlay.active { display: flex; }
-	.modal-card { width: 100%; max-width: 500px; padding: 3rem; }
-	
-	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+	.modal-card {
+		width: 100%; max-width: 560px;
+		padding: 2.5rem 3rem 3rem; border-radius: 16px;
+		max-height: 92vh; overflow-y: auto;
+	}
+	.modal-card h2 { font-size: 2rem; margin-bottom: 0.75rem; }
+
+	/* Context chip */
+	.hours-context-chip {
+		display: inline-flex; align-items: center; gap: 0.5rem;
+		background: rgba(197, 160, 89, 0.1); border: 1px solid rgba(197, 160, 89, 0.25);
+		color: var(--color-primary); font-size: 0.78rem; font-weight: 600;
+		padding: 0.4rem 0.9rem; border-radius: 100px;
+		margin-bottom: 2rem;
+	}
+
+	.form-group { margin-bottom: 1.25rem; }
+	.form-group label {
+		display: block; font-size: 0.7rem; text-transform: uppercase;
+		color: var(--color-text-muted); margin-bottom: 0.5rem;
+		letter-spacing: 0.08em; font-weight: 600;
+	}
+	.form-group input,
+	.form-group textarea,
+	.form-group select {
+		width: 100%; background: var(--color-surface);
+		border: 1px solid var(--color-border); border-radius: 10px;
+		padding: 0.85rem 1.1rem; color: var(--color-text);
+		font-family: inherit; font-size: 0.95rem;
+		outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+		box-sizing: border-box;
+	}
+	.form-group input:focus,
+	.form-group textarea:focus,
+	.form-group select:focus {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.12);
+	}
+
+	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+	.modal-actions {
+		display: flex; gap: 1rem; margin-top: 2.5rem;
+		padding-top: 1.5rem; border-top: 1px solid var(--color-border);
+	}
+	.modal-actions .btn-primary,
+	.modal-actions .btn-secondary {
+		flex: 1; padding: 0.85rem 1rem; border-radius: 10px;
+		font-size: 0.9rem; font-weight: 600; text-align: center;
+	}
 
 	@media (max-width: 600px) {
 		.page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
 		.form-row { grid-template-columns: 1fr; }
+		.modal-card { padding: 2rem 1.5rem; }
+		.hours-drawer { padding: 0; }
+		.drawer-inner { border-radius: 0; }
 	}
 </style>
