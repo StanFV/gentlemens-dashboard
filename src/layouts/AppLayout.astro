@@ -538,9 +538,10 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		const inp = document.getElementById('global-search-input') as HTMLInputElement;
 		if (inp) inp.value = '';
 
-		// Auto-close after 15s
+		// Auto-close after configured duration (default 15s)
+		const koosDuration = Math.min(300, Math.max(5, parseInt(localStorage.getItem('koos-duration') || '15'))) * 1000;
 		if (koosTimer) clearTimeout(koosTimer);
-		koosTimer = setTimeout(closeKoos, 15000);
+		koosTimer = setTimeout(closeKoos, koosDuration);
 	}
 
 	function closeKoos() {
