@@ -2,55 +2,78 @@
 import AppLayout from '../layouts/AppLayout.astro';
 ---
 
-<AppLayout title="Feature Checklist | Gentlemen's Dashboard">
+<AppLayout title="Backlog | Gentlemen's Dashboard">
 	<header class="page-header">
 		<div>
-			<h1 class="serif">Feature <span class="gold-text italic">Checklist</span></h1>
-			<p class="subtitle">Suggest, manage, and track upcoming dashboard refinements.</p>
+			<h1 class="serif">Product <span class="gold-text italic">Backlog</span></h1>
+			<p class="subtitle">Manage features and bugs. Prioritize what matters.</p>
 		</div>
-		<button id="open-modal-btn" class="btn-primary">+ Create New Request</button>
+		<button id="open-modal-btn" class="btn-primary">+ Add Item</button>
 	</header>
 
 	<div class="list-filters card">
 		<div class="filter-group">
 			<button class="filter-btn active" data-status="all">All</button>
-			<button class="filter-btn" data-status="pending">Pending</button>
 			<button class="filter-btn" data-status="planned">Planned</button>
 			<button class="filter-btn" data-status="in-progress">In Progress</button>
 			<button class="filter-btn" data-status="completed">Completed</button>
+		</div>
+		<div class="sort-group">
+			<span class="sort-label">Sort:</span>
+			<button class="sort-btn active" data-sort="date">Date</button>
+			<button class="sort-btn" data-sort="priority">Priority</button>
+			<button class="sort-btn" data-sort="category">Category</button>
 		</div>
 	</div>
 
 	<div class="list-wrapper card">
 		<div class="list-header">
 			<div class="col-status">Status</div>
-			<div class="col-title">Feature Request</div>
+			<div class="col-priority">Priority</div>
+			<div class="col-title">Item</div>
 			<div class="col-assignee">Assigned To</div>
 			<div class="col-date">Date</div>
 			<div class="col-actions"></div>
 		</div>
-		<div id="features-container" class="list-items">
-			<div class="loading-state">Loading the request vault...</div>
+		<div id="backlog-container" class="list-items">
+			<div class="loading-state">Loading the backlog...</div>
 		</div>
 	</div>
 
 	<!-- Modal -->
-	<div id="feature-modal" class="modal-overlay">
+	<div id="backlog-modal" class="modal-overlay">
 		<div class="modal-card card">
-			<h2 id="modal-title" class="serif">New <span class="gold-text">Request</span></h2>
-			<form id="feature-form">
-				<input type="hidden" id="feature-id" name="id" />
+			<h2 id="modal-title" class="serif">New <span class="gold-text">Item</span></h2>
+			<form id="backlog-form">
+				<input type="hidden" id="item-id" name="id" />
 				<div class="form-group">
-					<label for="title">Feature Title *</label>
+					<label for="title">Title *</label>
 					<input type="text" id="title" name="title" required placeholder="A brief, descriptive title" />
 				</div>
 				<div class="form-group">
-					<label for="description">Detailed Description</label>
-					<textarea id="description" name="description" rows="4" placeholder="Elaborate on the request..."></textarea>
+					<label for="description">Description</label>
+					<textarea id="description" name="description" rows="3" placeholder="Elaborate on the item..."></textarea>
 				</div>
 				<div class="form-row">
 					<div class="form-group">
-						<label for="status">Current Status</label>
+						<label for="category">Category</label>
+						<select id="category" name="category">
+							<option value="feature">Feature</option>
+							<option value="bug">Bug</option>
+						</select>
+					</div>
+					<div class="form-group">
+						<label for="priority">Priority</label>
+						<select id="priority" name="priority">
+							<option value="high">High</option>
+							<option value="medium" selected>Medium</option>
+							<option value="low">Low</option>
+						</select>
+					</div>
+				</div>
+				<div class="form-row">
+					<div class="form-group">
+						<label for="status">Status</label>
 						<select id="status" name="status">
 							<option value="planned">Planned</option>
 							<option value="in-progress">In Progress</option>
@@ -64,10 +87,10 @@ import AppLayout from '../layouts/AppLayout.astro';
 						</select>
 					</div>
 				</div>
-				
+
 				<div class="modal-actions">
 					<button type="button" id="cancel-btn" class="btn-secondary">Cancel</button>
-					<button type="submit" id="submit-btn" class="btn-primary">Save Request</button>
+					<button type="submit" id="submit-btn" class="btn-primary">Save Item</button>
 				</div>
 			</form>
 		</div>
@@ -76,18 +99,40 @@ import AppLayout from '../layouts/AppLayout.astro';
 	<script>
 		import { supabase } from '../lib/supabase';
 
-		const container = document.getElementById('features-container');
+		const container = document.getElementById('backlog-container');
 		const filterBtns = document.querySelectorAll('.filter-btn');
-		const modal = document.getElementById('feature-modal');
+		const sortBtns = document.querySelectorAll('.sort-btn');
+		const modal = document.getElementById('backlog-modal');
 		const openModalBtn = document.getElementById('open-modal-btn');
 		const cancelBtn = document.getElementById('cancel-btn');
-		const form = document.getElementById('feature-form') as HTMLFormElement;
+		const form = document.getElementById('backlog-form') as HTMLFormElement;
 		const userSelect = document.getElementById('assigned_to') as HTMLSelectElement;
 		const modalTitleEl = document.getElementById('modal-title');
 		const submitBtn = document.getElementById('submit-btn');
 
 		let currentStatus = 'all';
-		let cachedFeatures = [];
+		let currentSort = 'date';
+		let cachedItems = [];
+
+		const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+
+		function priorityIcon(p: string) {
+			if (p === 'high') return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>`;
+			if (p === 'low') return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+			return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>`;
+		}
+
+		function sortItems(items: any[]) {
+			const sorted = [...items];
+			if (currentSort === 'priority') {
+				sorted.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1));
+			} else if (currentSort === 'category') {
+				sorted.sort((a, b) => (a.category ?? '').localeCompare(b.category ?? ''));
+			} else {
+				sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+			}
+			return sorted;
+		}
 
 		async function loadUsers() {
 			const { data } = await supabase.from('profiles').select('id, full_name, username');
@@ -101,21 +146,13 @@ import AppLayout from '../layouts/AppLayout.astro';
 			}
 		}
 
-		async function loadFeatures() {
+		async function loadItems() {
 			if (!container) return;
-			container.innerHTML = '<div class="loading-state">Loading the request vault...</div>';
+			container.innerHTML = '<div class="loading-state">Loading the backlog...</div>';
 
 			let query = supabase
 				.from('feature_requests')
-				.select(`
-					*,
-					assignee:profiles!assigned_to (
-						full_name,
-						username,
-						avatar_url
-					)
-				`)
-				.order('created_at', { ascending: false });
+				.select(`*, assignee:profiles!assigned_to(full_name, username, avatar_url)`);
 
 			if (currentStatus !== 'all') {
 				query = query.eq('status', currentStatus);
@@ -129,28 +166,39 @@ import AppLayout from '../layouts/AppLayout.astro';
 			}
 
 			if (!data || data.length === 0) {
-				container.innerHTML = `<div class="empty-state"><p>No requests found in this archives.</p></div>`;
+				container.innerHTML = `<div class="empty-state"><p>The backlog is clear.</p></div>`;
 				return;
 			}
 
-			cachedFeatures = data;
-			renderFeatures(data);
+			cachedItems = data;
+			renderItems(sortItems(data));
 		}
 
-		function renderFeatures(features) {
-			container!.innerHTML = features.map(f => {
+		function renderItems(items: any[]) {
+			container!.innerHTML = items.map(f => {
 				const assignee = f.assignee;
 				const assigneeName = assignee ? (assignee.full_name || assignee.username) : 'Unassigned';
 				const assigneeAvatar = assignee?.avatar_url || `https://ui-avatars.com/api/?name=${assigneeName}&background=1c1917&color=c5a059`;
+				const category = f.category || 'feature';
+				const priority = f.priority || 'medium';
 
 				return `
 					<div class="list-item" data-id="${f.id}">
 						<div class="col-status">
 							<span class="status-badge status-${f.status}">${f.status}</span>
 						</div>
+						<div class="col-priority">
+							<span class="priority-badge priority-${priority}">
+								${priorityIcon(priority)}
+								${priority}
+							</span>
+						</div>
 						<div class="col-title">
 							<div class="title-group">
-								<h3 class="item-title">${f.title}</h3>
+								<div class="title-row">
+									<h3 class="item-title">${f.title}</h3>
+									<span class="category-badge category-${category}">${category}</span>
+								</div>
 								<p class="item-desc">${f.description || 'No description provided.'}</p>
 							</div>
 						</div>
@@ -182,37 +230,40 @@ import AppLayout from '../layouts/AppLayout.astro';
 			document.querySelectorAll('.edit-btn').forEach(btn => {
 				btn.addEventListener('click', (e) => {
 					const id = (e.currentTarget as HTMLElement).closest('.list-item')?.getAttribute('data-id');
-					const feature = cachedFeatures.find(f => f.id === id);
-					if (feature) openModal(feature);
+					const item = cachedItems.find(f => f.id === id);
+					if (item) openModal(item);
 				});
 			});
 
 			document.querySelectorAll('.delete-btn').forEach(btn => {
 				btn.addEventListener('click', async (e) => {
 					const id = (e.currentTarget as HTMLElement).closest('.list-item')?.getAttribute('data-id');
-					if (id && confirm('Are you certain you wish to purge this request?')) {
+					if (id && confirm('Remove this item from the backlog?')) {
 						const { error } = await supabase.from('feature_requests').delete().eq('id', id);
 						if (error) alert(error.message);
-						else loadFeatures();
+						else loadItems();
 					}
 				});
 			});
 		}
 
-		function openModal(feature = null) {
-			if (feature) {
-				modalTitleEl!.innerHTML = 'Edit <span class="gold-text">Request</span>';
-				submitBtn!.textContent = 'Update Request';
-				(document.getElementById('feature-id') as HTMLInputElement).value = feature.id;
-				(document.getElementById('title') as HTMLInputElement).value = feature.title;
-				(document.getElementById('description') as HTMLTextAreaElement).value = feature.description || '';
-				(document.getElementById('status') as HTMLSelectElement).value = feature.status;
-				(document.getElementById('assigned_to') as HTMLSelectElement).value = feature.assigned_to || '';
+		function openModal(item = null) {
+			if (item) {
+				modalTitleEl!.innerHTML = 'Edit <span class="gold-text">Item</span>';
+				submitBtn!.textContent = 'Update Item';
+				(document.getElementById('item-id') as HTMLInputElement).value = item.id;
+				(document.getElementById('title') as HTMLInputElement).value = item.title;
+				(document.getElementById('description') as HTMLTextAreaElement).value = item.description || '';
+				(document.getElementById('category') as HTMLSelectElement).value = item.category || 'feature';
+				(document.getElementById('priority') as HTMLSelectElement).value = item.priority || 'medium';
+				(document.getElementById('status') as HTMLSelectElement).value = item.status;
+				(document.getElementById('assigned_to') as HTMLSelectElement).value = item.assigned_to || '';
 			} else {
-				modalTitleEl!.innerHTML = 'New <span class="gold-text">Request</span>';
-				submitBtn!.textContent = 'Save Request';
+				modalTitleEl!.innerHTML = 'New <span class="gold-text">Item</span>';
+				submitBtn!.textContent = 'Save Item';
 				form.reset();
-				(document.getElementById('feature-id') as HTMLInputElement).value = '';
+				(document.getElementById('item-id') as HTMLInputElement).value = '';
+				(document.getElementById('priority') as HTMLSelectElement).value = 'medium';
 			}
 			modal?.classList.add('active');
 		}
@@ -233,46 +284,45 @@ import AppLayout from '../layouts/AppLayout.astro';
 			const payload = {
 				title: formData.get('title'),
 				description: formData.get('description'),
+				category: formData.get('category'),
+				priority: formData.get('priority'),
 				status: formData.get('status'),
 				assigned_to: formData.get('assigned_to') || null,
 			};
 
 			let result;
-			let oldFeature = id ? cachedFeatures.find(f => f.id === id) : null;
+			let oldItem = id ? cachedItems.find(f => f.id === id) : null;
 
 			if (id) {
 				result = await supabase.from('feature_requests').update(payload).eq('id', id);
-				
-				if (!result.error && oldFeature && oldFeature.status !== payload.status) {
-					// Notify status change
+
+				if (!result.error && oldItem && oldItem.status !== payload.status) {
 					await supabase.from('notifications').insert({
 						user_id: session?.user.id,
 						type: 'feature_status_changed',
-						title: 'Feature Status Updated',
-						content: `Status of "${payload.title}" changed from ${oldFeature.status} to ${payload.status}`,
-						link: '/feature-checklist'
+						title: 'Backlog Item Status Updated',
+						content: `Status of "${payload.title}" changed from ${oldItem.status} to ${payload.status}`,
+						link: '/backlog'
 					});
 				} else if (!result.error) {
-					// General update notification (optional, maybe only for major changes)
 					await supabase.from('notifications').insert({
 						user_id: session?.user.id,
 						type: 'feature_updated',
-						title: 'Feature Request Updated',
+						title: 'Backlog Item Updated',
 						content: `"${payload.title}" was updated.`,
-						link: '/feature-checklist'
+						link: '/backlog'
 					});
 				}
 			} else {
 				result = await supabase.from('feature_requests').insert({ ...payload, user_id: session?.user.id });
-				
+
 				if (!result.error) {
-					// Notify new feature
 					await supabase.from('notifications').insert({
 						user_id: session?.user.id,
 						type: 'feature_added',
-						title: 'New Feature Requested',
-						content: `A new feature "${payload.title}" has been proposed.`,
-						link: '/feature-checklist'
+						title: 'New Backlog Item',
+						content: `"${payload.title}" was added to the backlog.`,
+						link: '/backlog'
 					});
 				}
 			}
@@ -280,7 +330,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 			if (result.error) alert(result.error.message);
 			else {
 				closeModal();
-				loadFeatures();
+				loadItems();
 			}
 		});
 
@@ -289,12 +339,21 @@ import AppLayout from '../layouts/AppLayout.astro';
 				filterBtns.forEach(b => b.classList.remove('active'));
 				btn.classList.add('active');
 				currentStatus = (btn as HTMLButtonElement).dataset.status || 'all';
-				loadFeatures();
+				loadItems();
+			});
+		});
+
+		sortBtns.forEach(btn => {
+			btn.addEventListener('click', () => {
+				sortBtns.forEach(b => b.classList.remove('active'));
+				btn.classList.add('active');
+				currentSort = (btn as HTMLButtonElement).dataset.sort || 'date';
+				renderItems(sortItems(cachedItems));
 			});
 		});
 
 		loadUsers();
-		loadFeatures();
+		loadItems();
 	</script>
 </AppLayout>
 
@@ -303,23 +362,39 @@ import AppLayout from '../layouts/AppLayout.astro';
 	h1 { font-size: 3.5rem; line-height: 1; margin-bottom: 1rem; }
 	.subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
 
-	.list-filters { padding: 1rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; }
-	.filter-group { display: flex; gap: 0.5rem; }
+	.list-filters { padding: 1rem 1.25rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+	.filter-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 	.filter-btn { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.5rem 1.25rem; border-radius: 100px; font-size: 0.85rem; cursor: pointer; transition: all 0.3s; }
 	.filter-btn:hover { border-color: var(--color-primary); color: var(--color-text); }
 	.filter-btn.active { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
 
+	.sort-group { display: flex; align-items: center; gap: 0.4rem; }
+	.sort-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); font-weight: 700; margin-right: 0.25rem; }
+	.sort-btn { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.4rem 0.9rem; border-radius: 100px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+	.sort-btn:hover { border-color: var(--color-primary); color: var(--color-text); }
+	.sort-btn.active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-dim); }
+
 	.list-wrapper { overflow: hidden; }
-	.list-header { display: grid; grid-template-columns: 140px 1fr 180px 120px 100px; padding: 1.5rem 2rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
-	
+	.list-header { display: grid; grid-template-columns: 130px 100px 1fr 170px 110px 90px; padding: 1.5rem 2rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); font-weight: 700; }
+
 	.list-items { min-height: 200px; }
-	.list-item { display: grid; grid-template-columns: 140px 1fr 180px 120px 100px; padding: 1.5rem 2rem; border-bottom: 1px solid var(--color-border); align-items: center; transition: background 0.2s; }
+	.list-item { display: grid; grid-template-columns: 130px 100px 1fr 170px 110px 90px; padding: 1.25rem 2rem; border-bottom: 1px solid var(--color-border); align-items: center; transition: background 0.2s; }
 	.list-item:last-child { border-bottom: none; }
 	.list-item:hover { background: rgba(197, 160, 89, 0.03); }
 
+	.title-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
 	.col-title { padding-right: 2rem; }
-	.item-title { font-size: 1.1rem; margin-bottom: 0.25rem; color: var(--color-text); }
-	.item-desc { font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.5; }
+	.item-title { font-size: 1rem; color: var(--color-text); }
+	.item-desc { font-size: 0.83rem; color: var(--color-text-muted); line-height: 1.5; }
+
+	.category-badge { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 100px; flex-shrink: 0; }
+	.category-feature { background: rgba(37, 99, 235, 0.15); color: #60a5fa; }
+	.category-bug { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+	.priority-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; padding: 0.3rem 0.6rem; border-radius: 6px; }
+	.priority-high { background: rgba(239, 68, 68, 0.12); color: #f87171; }
+	.priority-medium { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
+	.priority-low { background: rgba(107, 114, 128, 0.15); color: var(--color-text-muted); }
 
 	.assignee-pill { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; font-weight: 500; }
 	.assignee-avatar { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--color-primary); }
@@ -339,23 +414,24 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	.loading-state, .empty-state { padding: 4rem; text-align: center; color: var(--color-text-muted); font-style: italic; }
 
-	/* Modal Styling - Shared with Projects */
 	.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 2rem; }
 	.modal-overlay.active { display: flex; }
-	.modal-card { width: 100%; max-width: 500px; padding: 3rem; }
-	
+	.modal-card { width: 100%; max-width: 520px; padding: 3rem; }
+
 	.form-group { margin-bottom: 1.5rem; }
 	.form-group label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.5rem; letter-spacing: 0.1em; font-weight: 700; }
 	.form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem 1rem; color: var(--color-text); font-family: inherit; outline: none; transition: border-color 0.2s; }
 	.form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--color-primary); }
-	
+
 	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 	.modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
 
 	@media (max-width: 900px) {
 		.list-header { display: none; }
-		.list-item { grid-template-columns: 1fr; gap: 1rem; padding: 2rem; }
+		.list-item { grid-template-columns: 1fr; gap: 0.75rem; padding: 1.5rem; }
 		.col-actions { justify-content: flex-start; }
-		.col-status, .col-title, .col-assignee, .col-date, .col-actions { padding: 0; }
+		.col-status, .col-priority, .col-title, .col-assignee, .col-date, .col-actions { padding: 0; }
+		.col-title { padding-right: 0; }
+		.list-filters { flex-direction: column; align-items: flex-start; }
 	}
 </style>
