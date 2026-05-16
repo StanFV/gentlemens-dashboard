@@ -509,12 +509,16 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 	let koosTimer: ReturnType<typeof setTimeout> | null = null;
 
 	async function triggerKoosEasterEgg() {
-		// Fetch random song from storage
-		const { data: songs } = await supabase.storage.from('koos-alberts').list('songs');
+		// Fetch random song from koos_songs table (has display_name)
+		const { data: songs } = await supabase.from('koos_songs').select('*');
 		if (!songs?.length) return;
 
 		const pick = songs[Math.floor(Math.random() * songs.length)];
-		const songUrl = supabase.storage.from('koos-alberts').getPublicUrl('songs/' + pick.name).data.publicUrl;
+		const songUrl = supabase.storage.from('koos-alberts').getPublicUrl(pick.file_path).data.publicUrl;
+
+		// Show song name on overlay
+		const songTitle = document.getElementById('koos-song-title');
+		if (songTitle) songTitle.textContent = pick.display_name || '';
 
 		// Fetch photo
 		const { data: photos } = await supabase.storage.from('koos-alberts').list('photo');
@@ -879,7 +883,10 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		<div class="koos-card">
 			<div class="koos-vibes">♪ Koos Alberts ♪</div>
 			<img id="koos-photo-img" class="koos-photo-img" src="" alt="Koos Alberts" />
-			<div class="koos-footer serif">De Stem van het Volk</div>
+			<div class="koos-footer serif">
+				<div id="koos-song-title" class="koos-song-title"></div>
+				<div class="koos-footer-sub">De Stem van het Volk</div>
+			</div>
 		</div>
 	</div>
 </Layout>
@@ -911,7 +918,7 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		left: 50%;
 		transform: translate(-50%, 110%);
 		z-index: 9999;
-		transition: transform 0.65s cubic-bezier(0.34, 1.4, 0.64, 1);
+		transition: transform 3s cubic-bezier(0.16, 1, 0.3, 1);
 		pointer-events: none;
 	}
 	.koos-overlay.koos-active {
@@ -946,12 +953,23 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		object-position: top;
 	}
 	.koos-footer {
-		padding: 0.6rem;
+		padding: 0.6rem 0.75rem;
 		text-align: center;
-		font-size: 0.85rem;
-		color: var(--color-primary);
 		background: var(--color-surface);
 		border-top: 1px solid var(--color-border);
+	}
+	.koos-song-title {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--color-primary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.koos-footer-sub {
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		margin-top: 0.15rem;
 	}
 	@media (max-width: 600px) {
 		.koos-card { width: calc(100vw - 2rem); }
