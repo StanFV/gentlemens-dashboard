@@ -186,28 +186,31 @@ import AppLayout from '../layouts/AppLayout.astro';
 	const EDIT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
 	const DELETE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H5c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
 
-	async function loadSongs() {
-		// List all files currently in storage
-		const { data: storageFiles } = await supabase.storage.from('koos-alberts').list('songs');
-		// Get all records from the table
-		const { data: dbSongs } = await supabase.from('koos_songs').select('*');
-
+	async function syncStorageToTable() {
+		const [{ data: storageFiles }, { data: dbSongs }] = await Promise.all([
+			supabase.storage.from('koos-alberts').list('songs'),
+			supabase.from('koos_songs').select('file_path')
+		]);
 		const dbPaths = new Set((dbSongs || []).map((s: any) => s.file_path));
-
-		// Auto-insert any storage files not yet in koos_songs
-		const missing = (storageFiles || []).filter(f => !dbPaths.has(`songs/${f.name}`));
+		const missing = (storageFiles || []).filter(f => f.name !== '.emptyFolderPlaceholder' && !dbPaths.has(`songs/${f.name}`));
 		if (missing.length) {
 			await supabase.from('koos_songs').insert(
 				missing.map(f => ({
 					file_path: `songs/${f.name}`,
-					display_name: f.name.replace(/^\d+-/, '').replace(/\.[^/.]+$/, '').replace(/_/g, ' ')
+					display_name: f.name.replace(/^\d+-/, '').replace(/\.[^/.]+$/, '').replace(/_/g, ' ').trim() || f.name
 				}))
 			);
-			return loadSongs();
 		}
+	}
 
+	async function loadSongs() {
 		const { data, error } = await supabase.from('koos_songs').select('*').order('created_at', { ascending: false });
-		if (error || !data?.length) {
+		if (error) {
+			songsList.innerHTML = `<p class="koos-empty">Fout bij laden: ${error.message}</p>`;
+			songCount.textContent = '';
+			return;
+		}
+		if (!data?.length) {
 			songsList.innerHTML = '<p class="koos-empty">Geen nummers geüpload.</p>';
 			songCount.textContent = '';
 			return;
@@ -322,9 +325,9 @@ import AppLayout from '../layouts/AppLayout.astro';
 		});
 	}
 
-	// Initial load
+	// Initial load — sync storage→table in background, then render
 	loadPhoto();
-	loadSongs();
+	syncStorageToTable().then(() => loadSongs());
 </script>
 
 <style is:global>
