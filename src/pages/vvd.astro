@@ -1,31 +1,45 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
 
-let newsItems: { title: string; link: string; description: string; pubDate: string }[] = [];
-let rssError = false;
+type NewsItem = { title: string; link: string; description: string; pubDate: string };
 
-try {
-	const response = await fetch('https://feeds.nos.nl/nosnieuwspolitiek', {
-		headers: { 'Accept': 'application/rss+xml, application/xml, text/xml' }
+function parseRss(xml: string, limit = 8): NewsItem[] {
+	const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+	return items.slice(0, limit).map(item => {
+		const title = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1]
+			|| item.match(/<title>(.*?)<\/title>/)?.[1] || '';
+		const link = item.match(/<link>(.*?)<\/link>/)?.[1]
+			|| item.match(/<guid[^>]*>(.*?)<\/guid>/)?.[1] || '#';
+		const description = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1]
+			|| item.match(/<description>(.*?)<\/description>/)?.[1] || '';
+		const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
+		return { title, link, description: description.replace(/<[^>]*>/g, '').substring(0, 120), pubDate };
 	});
-	if (response.ok) {
-		const xml = await response.text();
-		const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-		newsItems = items.slice(0, 8).map(item => {
-			const title = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1]
-				|| item.match(/<title>(.*?)<\/title>/)?.[1] || '';
-			const link = item.match(/<link>(.*?)<\/link>/)?.[1]
-				|| item.match(/<guid[^>]*>(.*?)<\/guid>/)?.[1] || '#';
-			const description = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1]
-				|| item.match(/<description>(.*?)<\/description>/)?.[1] || '';
-			const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
-			return { title, link, description: description.replace(/<[^>]*>/g, '').substring(0, 120), pubDate };
-		});
-	} else {
-		rssError = true;
-	}
-} catch {
-	rssError = true;
+}
+
+let nosItems: NewsItem[] = [];
+let nosError = false;
+
+let vvdItems: NewsItem[] = [];
+let vvdError = false;
+
+const headers = { 'Accept': 'application/rss+xml, application/xml, text/xml' };
+
+const [nosRes, vvdRes] = await Promise.allSettled([
+	fetch('https://feeds.nos.nl/nosnieuwspolitiek', { headers }),
+	fetch('https://www.vvd.nl/nieuws/feed/', { headers }),
+]);
+
+if (nosRes.status === 'fulfilled' && nosRes.value.ok) {
+	nosItems = parseRss(await nosRes.value.text());
+} else {
+	nosError = true;
+}
+
+if (vvdRes.status === 'fulfilled' && vvdRes.value.ok) {
+	vvdItems = parseRss(await vvdRes.value.text());
+} else {
+	vvdError = true;
 }
 ---
 
@@ -219,39 +233,75 @@ try {
 		</div>
 	</section>
 
-	<section class="news-section">
-		<div class="news-header">
-			<div>
-				<h2 class="serif section-title">Politiek Nieuws</h2>
-				<p class="news-source">NOS Nieuws — Politiek</p>
+	<div class="news-columns">
+		<section class="news-section">
+			<div class="news-header">
+				<div>
+					<h2 class="serif section-title">Politiek Nieuws</h2>
+					<p class="news-source">NOS Nieuws — Politiek</p>
+				</div>
+				<a href="https://nos.nl/nieuws/politiek" target="_blank" rel="noopener noreferrer" class="text-btn">Naar NOS →</a>
 			</div>
-			<a href="https://nos.nl/nieuws/politiek" target="_blank" rel="noopener noreferrer" class="text-btn">Naar NOS →</a>
-		</div>
 
-		{rssError ? (
-			<div class="card error-card">
-				<p class="error-msg">Kon het nieuwsfeed niet laden. Controleer de verbinding of bezoek <a href="https://nos.nl/nieuws/politiek" target="_blank" rel="noopener noreferrer">nos.nl/nieuws/politiek</a> direct.</p>
+			{nosError ? (
+				<div class="card error-card">
+					<p class="error-msg">Kon het nieuwsfeed niet laden. Controleer de verbinding of bezoek <a href="https://nos.nl/nieuws/politiek" target="_blank" rel="noopener noreferrer">nos.nl/nieuws/politiek</a> direct.</p>
+				</div>
+			) : nosItems.length === 0 ? (
+				<div class="card error-card">
+					<p class="error-msg">Geen nieuwsberichten gevonden.</p>
+				</div>
+			) : (
+				<div class="news-list">
+					{nosItems.map(item => (
+						<a href={item.link} target="_blank" rel="noopener noreferrer" class="news-card card">
+							<div class="news-meta">
+								<span class="nos-badge">NOS</span>
+								{item.pubDate && <span class="news-date">{new Date(item.pubDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+							</div>
+							<h3 class="news-title">{item.title}</h3>
+							{item.description && <p class="news-desc">{item.description}…</p>}
+							<span class="news-read">Lees meer →</span>
+						</a>
+					))}
+				</div>
+			)}
+		</section>
+
+		<section class="news-section">
+			<div class="news-header">
+				<div>
+					<h2 class="serif section-title">VVD Nieuws</h2>
+					<p class="news-source">VVD.nl — Landelijk nieuws</p>
+				</div>
+				<a href="https://www.vvd.nl/nieuws/" target="_blank" rel="noopener noreferrer" class="text-btn">Naar VVD →</a>
 			</div>
-		) : newsItems.length === 0 ? (
-			<div class="card error-card">
-				<p class="error-msg">Geen nieuwsberichten gevonden.</p>
-			</div>
-		) : (
-			<div class="news-grid">
-				{newsItems.map((item, i) => (
-					<a href={item.link} target="_blank" rel="noopener noreferrer" class={`news-card card ${i === 0 ? 'news-featured' : ''}`}>
-						<div class="news-meta">
-							<span class="nos-badge">NOS</span>
-							{item.pubDate && <span class="news-date">{new Date(item.pubDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
-						</div>
-						<h3 class="news-title">{item.title}</h3>
-						{item.description && <p class="news-desc">{item.description}…</p>}
-						<span class="news-read">Lees meer →</span>
-					</a>
-				))}
-			</div>
-		)}
-	</section>
+
+			{vvdError ? (
+				<div class="card error-card">
+					<p class="error-msg">Kon het VVD nieuwsfeed niet laden. Bezoek <a href="https://www.vvd.nl/nieuws/" target="_blank" rel="noopener noreferrer">vvd.nl/nieuws</a> direct.</p>
+				</div>
+			) : vvdItems.length === 0 ? (
+				<div class="card error-card">
+					<p class="error-msg">Geen VVD nieuwsberichten gevonden.</p>
+				</div>
+			) : (
+				<div class="news-list">
+					{vvdItems.map(item => (
+						<a href={item.link} target="_blank" rel="noopener noreferrer" class="news-card card">
+							<div class="news-meta">
+								<span class="vvd-badge">VVD</span>
+								{item.pubDate && <span class="news-date">{new Date(item.pubDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+							</div>
+							<h3 class="news-title">{item.title}</h3>
+							{item.description && <p class="news-desc">{item.description}…</p>}
+							<span class="news-read">Lees meer →</span>
+						</a>
+					))}
+				</div>
+			)}
+		</section>
+	</div>
 </AppLayout>
 
 <style is:global>
@@ -418,13 +468,14 @@ try {
 	.font-download-btn:hover { background: var(--color-primary-dim); border-color: var(--color-primary); }
 
 	/* News Section */
-	.news-section { margin-bottom: 3rem; }
+	.news-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 3rem; align-items: start; }
+	.news-section { margin-bottom: 0; }
 	.news-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
 	.news-source { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.25rem; }
 	.text-btn { color: var(--color-primary); text-decoration: none; font-size: 0.9rem; font-weight: 500; padding-top: 0.25rem; }
 	.text-btn:hover { text-decoration: underline; }
 
-	.news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
+	.news-list { display: flex; flex-direction: column; gap: 1rem; }
 
 	.news-card {
 		display: flex;
@@ -438,14 +489,21 @@ try {
 	}
 	.news-card:hover { border-color: var(--color-primary); transform: translateY(-1px); }
 
-	.news-featured { grid-column: span 2; }
-
 	.news-meta { display: flex; align-items: center; gap: 0.75rem; }
 	.nos-badge {
 		font-size: 0.6rem;
 		font-weight: 700;
 		letter-spacing: 0.1em;
 		background: #cc0000;
+		color: #fff;
+		padding: 0.2rem 0.5rem;
+		border-radius: 3px;
+	}
+	.vvd-badge {
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		background: #0A2CCA;
 		color: #fff;
 		padding: 0.2rem 0.5rem;
 		border-radius: 3px;
@@ -468,8 +526,7 @@ try {
 		.quick-links-grid { grid-template-columns: 1fr; }
 		.social-grid { grid-template-columns: 1fr; }
 		.brand-grid { grid-template-columns: 1fr; }
-		.news-grid { grid-template-columns: 1fr; }
-		.news-featured { grid-column: span 1; }
+		.news-columns { grid-template-columns: 1fr; }
 		.news-header { flex-direction: column; gap: 0.5rem; }
 	}
 </style>
