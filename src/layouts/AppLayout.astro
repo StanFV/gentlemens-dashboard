@@ -504,9 +504,15 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 	// -------------------------------------------------------------------------
 	// Koos Alberts Easter Egg
 	// -------------------------------------------------------------------------
+	// koosAudio is the persistent <audio> element (survives navigation via transition:persist)
+	// koosTimer lives on window so it also survives script re-runs between navigations
 
-	let koosAudio: HTMLAudioElement | null = null;
-	let koosTimer: ReturnType<typeof setTimeout> | null = null;
+	declare global { interface Window { __koosTimer: ReturnType<typeof setTimeout> | null; } }
+	if (window.__koosTimer === undefined) window.__koosTimer = null;
+
+	function getAudio(): HTMLAudioElement {
+		return document.getElementById('koos-audio') as HTMLAudioElement;
+	}
 
 	function setKoosSongLabel(title: string) {
 		const el = document.getElementById('koos-song-title');
@@ -515,46 +521,10 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		if (mini) mini.textContent = title;
 	}
 
-	function saveKoosState() {
-		if (!koosAudio || koosAudio.paused) { sessionStorage.removeItem('koosState'); return; }
-		const overlay = document.getElementById('koos-overlay');
-		const photoImg = document.getElementById('koos-photo-img') as HTMLImageElement;
-		sessionStorage.setItem('koosState', JSON.stringify({
-			songUrl: koosAudio.src,
-			songTitle: document.getElementById('koos-song-title')?.textContent || '',
-			photoSrc: photoImg?.src || '',
-			currentTime: koosAudio.currentTime,
-			minimized: overlay?.classList.contains('koos-minimized') ?? false
-		}));
-	}
-
-	function restoreKoosState() {
-		const raw = sessionStorage.getItem('koosState');
-		if (!raw) return;
-		try {
-			const state = JSON.parse(raw);
-			const photoImg = document.getElementById('koos-photo-img') as HTMLImageElement;
-			const overlay = document.getElementById('koos-overlay');
-			setKoosSongLabel(state.songTitle || '');
-			if (photoImg && state.photoSrc) { photoImg.src = state.photoSrc; photoImg.style.display = 'block'; }
-			if (koosAudio) { koosAudio.pause(); koosAudio = null; }
-			koosAudio = new Audio(state.songUrl);
-			koosAudio.addEventListener('canplay', () => {
-				if (koosAudio && state.currentTime > 0) koosAudio.currentTime = state.currentTime;
-			}, { once: true });
-			koosAudio.play().catch(() => {});
-			if (overlay) {
-				overlay.classList.add('koos-active');
-				if (state.minimized) overlay.classList.add('koos-minimized');
-			}
-			setAutoCloseTimer();
-		} catch {}
-	}
-
 	function setAutoCloseTimer() {
-		if (koosTimer) clearTimeout(koosTimer);
-		const koosDuration = Math.min(300, Math.max(5, parseInt(localStorage.getItem('koos-duration') || '15'))) * 1000;
-		koosTimer = setTimeout(closeKoos, koosDuration);
+		if (window.__koosTimer) clearTimeout(window.__koosTimer);
+		const secs = Math.min(300, Math.max(5, parseInt(localStorage.getItem('koos-duration') || '15')));
+		window.__koosTimer = setTimeout(closeKoos, secs * 1000);
 	}
 
 	async function triggerKoosEasterEgg() {
@@ -569,60 +539,45 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		const photoImg = document.getElementById('koos-photo-img') as HTMLImageElement;
 		const validPhotos = (photos || []).filter(p => p.name !== '.emptyFolderPlaceholder');
 		if (validPhotos.length && photoImg) {
-			const randomPhoto = validPhotos[Math.floor(Math.random() * validPhotos.length)];
-			photoImg.src = supabase.storage.from('koos-alberts').getPublicUrl('photo/' + randomPhoto.name).data.publicUrl;
+			const rp = validPhotos[Math.floor(Math.random() * validPhotos.length)];
+			photoImg.src = supabase.storage.from('koos-alberts').getPublicUrl('photo/' + rp.name).data.publicUrl;
 			photoImg.style.display = 'block';
 		} else if (photoImg) {
 			photoImg.style.display = 'none';
 		}
 
-		// Make sure overlay is not minimized on fresh trigger
 		document.getElementById('koos-overlay')?.classList.remove('koos-minimized');
 
-		if (koosAudio) { koosAudio.pause(); koosAudio = null; }
-		koosAudio = new Audio(songUrl);
-		koosAudio.play().catch(() => {});
+		const audio = getAudio();
+		audio.src = songUrl;
+		audio.play().catch(() => {});
 
-		// Reset search input
 		const inp = document.getElementById('global-search-input') as HTMLInputElement;
 		if (inp) inp.value = '';
 
-		// Wait before photo slides up
 		await new Promise(r => setTimeout(r, 1200));
 		document.getElementById('koos-overlay')?.classList.add('koos-active');
 		setAutoCloseTimer();
 	}
 
 	function closeKoos() {
-		sessionStorage.removeItem('koosState');
 		const overlay = document.getElementById('koos-overlay');
 		overlay?.classList.remove('koos-active', 'koos-minimized');
-		if (koosAudio) { koosAudio.pause(); koosAudio = null; }
-		if (koosTimer) { clearTimeout(koosTimer); koosTimer = null; }
+		const audio = getAudio();
+		audio.pause();
+		audio.src = '';
+		if (window.__koosTimer) { clearTimeout(window.__koosTimer); window.__koosTimer = null; }
 	}
 
-	function minimizeKoos() {
-		document.getElementById('koos-overlay')?.classList.add('koos-minimized');
-		saveKoosState();
-	}
+	function minimizeKoos() { document.getElementById('koos-overlay')?.classList.add('koos-minimized'); }
+	function expandKoos()   { document.getElementById('koos-overlay')?.classList.remove('koos-minimized'); }
 
-	function expandKoos() {
-		document.getElementById('koos-overlay')?.classList.remove('koos-minimized');
-		saveKoosState();
-	}
-
-	// Save state before navigation
-	window.addEventListener('beforeunload', saveKoosState);
-
-	// Restore if navigated away while playing
-	restoreKoosState();
-
-	// Controls
+	// Re-attach listeners on every page load (nav buttons are replaced by ViewTransitions)
 	document.getElementById('koos-logo-trigger')?.addEventListener('click', triggerKoosEasterEgg);
 	document.getElementById('koos-minimize-btn')?.addEventListener('click', (e) => { e.stopPropagation(); minimizeKoos(); });
-	document.getElementById('koos-expand-btn')?.addEventListener('click', (e) => { e.stopPropagation(); expandKoos(); });
-	document.getElementById('koos-close-btn')?.addEventListener('click', (e) => { e.stopPropagation(); closeKoos(); });
-	document.getElementById('koos-close-mini-btn')?.addEventListener('click', (e) => { e.stopPropagation(); closeKoos(); });
+	document.getElementById('koos-expand-btn')?.addEventListener('click',   (e) => { e.stopPropagation(); expandKoos(); });
+	document.getElementById('koos-close-btn')?.addEventListener('click',    (e) => { e.stopPropagation(); closeKoos(); });
+	document.getElementById('koos-close-mini-btn')?.addEventListener('click',(e) => { e.stopPropagation(); closeKoos(); });
 
 	// Search "koosje" + Enter trigger
 	document.getElementById('global-search-input')?.addEventListener('keydown', (e) => {
@@ -942,8 +897,11 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		</div>
 	</div>
 
+	<!-- Persistent audio element — survives page navigation via ViewTransitions -->
+	<audio id="koos-audio" transition:persist></audio>
+
 	<!-- Koos Alberts Easter Egg Overlay -->
-	<div id="koos-overlay" class="koos-overlay">
+	<div id="koos-overlay" class="koos-overlay" transition:persist>
 		<!-- Full view -->
 		<div id="koos-full-view" class="koos-full-view">
 			<div class="koos-overlay-controls">
