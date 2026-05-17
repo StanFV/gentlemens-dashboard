@@ -532,12 +532,13 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 			photoImg.style.display = 'none';
 		}
 
-		// Stop any previous audio
+		// Stop any previous audio and start new one
 		if (koosAudio) { koosAudio.pause(); koosAudio = null; }
 		koosAudio = new Audio(songUrl);
 		koosAudio.play().catch(() => {});
 
-		// Show overlay
+		// Wait 1.2s before sliding the photo up
+		await new Promise(r => setTimeout(r, 1200));
 		document.getElementById('koos-overlay')?.classList.add('koos-active');
 
 		// Reset input if triggered from search
