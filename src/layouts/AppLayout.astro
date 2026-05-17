@@ -883,6 +883,7 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 
 	<!-- Koos Alberts Easter Egg Overlay -->
 	<div id="koos-overlay" class="koos-overlay">
+		<div class="koos-name serif">Koos Alberts</div>
 		<img id="koos-photo-img" class="koos-photo-img" src="" alt="Koos Alberts" />
 		<div id="koos-song-title" class="koos-song-title serif"></div>
 	</div>
@@ -922,6 +923,14 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 	.koos-overlay.koos-active {
 		transform: translate(-50%, 0);
 		pointer-events: all;
+	}
+	.koos-name {
+		font-size: 3rem;
+		color: var(--color-primary);
+		letter-spacing: 0.04em;
+		text-shadow: 0 2px 12px rgba(0,0,0,0.9), 0 0 40px rgba(197,160,89,0.5);
+		margin-bottom: 0.4rem;
+		white-space: nowrap;
 	}
 	.koos-photo-img {
 		width: 420px;
