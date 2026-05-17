@@ -10,80 +10,21 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	<div class="settings-grid">
 
-		<!-- Koos Alberts Easter Egg Section -->
-		<section class="card settings-section koos-section">
-			<div class="koos-section-header">
-				<div>
-					<h2 class="serif">Koos Alberts <span class="gold-text">Easter Egg</span></h2>
-					<p class="setting-desc">Trigger via het logo linksboven of typ "koosje" in de zoekbalk en druk op Enter.</p>
+		<!-- Koos Easter Egg Card -->
+		<section class="card settings-section">
+			<div class="setting-item" style="padding:0">
+				<div class="setting-info">
+					<h2 class="serif" style="font-size:1.4rem;margin-bottom:0.4rem">Koos Alberts <span class="gold-text">Easter Egg</span></h2>
+					<p class="setting-desc">Beheer foto's, nummers en afspeelduur van de Koos easter egg. Trigger via het logo of typ "koosje" in de zoekbalk.</p>
 				</div>
-				<div class="koos-badge">🎵 Easter Egg</div>
-			</div>
-
-			<!-- Photos -->
-			<div class="koos-block">
-				<div class="koos-block-header">
-					<div>
-						<h3 class="koos-block-title">Foto's <span id="koos-photo-count" class="koos-count"></span></h3>
-						<p class="koos-block-desc">Meerdere foto's zijn mogelijk — er wordt willekeurig één gekozen bij elke trigger.</p>
-					</div>
-					<label class="btn-secondary koos-upload-label">
-						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-						Foto toevoegen
-						<input type="file" id="koos-photo-input" accept="image/*" hidden />
-					</label>
-				</div>
-				<div id="koos-photo-grid" class="koos-photo-grid">
-					<p class="koos-empty">Laden...</p>
-				</div>
-			</div>
-
-			<div class="koos-divider"></div>
-
-			<!-- Songs -->
-			<div class="koos-block">
-				<div class="koos-block-header">
-					<div>
-						<h3 class="koos-block-title">Nummers <span id="koos-song-count" class="koos-count"></span></h3>
-						<p class="koos-block-desc">Er wordt willekeurig één nummer afgespeeld bij elke trigger.</p>
-					</div>
-				</div>
-
-				<div id="koos-songs-list" class="koos-songs-list">
-					<p class="koos-empty">Laden...</p>
-				</div>
-
-				<div class="koos-song-upload-form">
-					<input type="text" id="koos-song-name-input" placeholder="Naam van het nummer (bijv. Geef mij maar Amsterdam)" class="koos-name-input" />
-					<label class="btn-secondary koos-upload-label">
-						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-						MP3 uploaden
-						<input type="file" id="koos-song-input" accept="audio/mpeg,audio/mp3,.mp3" hidden />
-					</label>
-				</div>
-				<div id="koos-upload-progress" class="koos-progress hidden">
-					<div class="koos-progress-bar" id="koos-progress-bar"></div>
-				</div>
-			</div>
-
-			<div class="koos-divider"></div>
-
-			<!-- Duration -->
-			<div class="koos-block">
-				<div class="koos-block-header">
-					<div>
-						<h3 class="koos-block-title">Afspeelduur</h3>
-						<p class="koos-block-desc">Aantal seconden dat de muziek speelt voordat het automatisch stopt.</p>
-					</div>
-					<div class="koos-duration-wrap">
-						<input type="number" id="koos-duration-input" min="5" max="300" value="15" class="koos-duration-input" />
-						<span class="koos-duration-unit">sec</span>
-					</div>
-				</div>
+				<button id="open-koos-drawer" class="btn-primary" style="flex-shrink:0;margin-left:2rem">
+					Beheren
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+				</button>
 			</div>
 		</section>
 
-		<!-- UI Section -->
+		<!-- Interface Preferences -->
 		<section class="card settings-section">
 			<h2 class="serif">Interface Preferences</h2>
 			<div class="info-grid">
@@ -100,7 +41,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 			</div>
 		</section>
 
-		<!-- Supabase Section -->
+		<!-- Technical Infrastructure -->
 		<section class="card settings-section">
 			<h2 class="serif">Technical Infrastructure</h2>
 			<div class="info-grid">
@@ -127,24 +68,120 @@ import AppLayout from '../layouts/AppLayout.astro';
 	</div>
 </AppLayout>
 
+<!-- Koos Easter Egg Drawer -->
+<div id="koos-drawer-backdrop" class="koos-drawer-backdrop"></div>
+<div id="koos-drawer" class="koos-drawer">
+	<div class="koos-drawer-header">
+		<div>
+			<h2 class="serif">Koos Alberts <span class="gold-text">Easter Egg</span></h2>
+			<p class="koos-drawer-sub">Foto's, nummers en afspeelduur</p>
+		</div>
+		<button id="close-koos-drawer" class="btn-icon koos-close-btn" title="Sluiten">
+			<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+		</button>
+	</div>
+
+	<div class="koos-drawer-body">
+
+		<!-- Photos -->
+		<div class="koos-block">
+			<div class="koos-block-header">
+				<div>
+					<h3 class="koos-block-title">Foto's <span id="koos-photo-count" class="koos-count"></span></h3>
+					<p class="koos-block-desc">Er wordt willekeurig één gekozen bij elke trigger.</p>
+				</div>
+				<label class="btn-secondary koos-upload-label">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+					Foto toevoegen
+					<input type="file" id="koos-photo-input" accept="image/*" hidden />
+				</label>
+			</div>
+			<div id="koos-photo-grid" class="koos-photo-grid">
+				<p class="koos-empty">Laden...</p>
+			</div>
+		</div>
+
+		<div class="koos-divider"></div>
+
+		<!-- Songs -->
+		<div class="koos-block">
+			<div class="koos-block-header">
+				<div>
+					<h3 class="koos-block-title">Nummers <span id="koos-song-count" class="koos-count"></span></h3>
+					<p class="koos-block-desc">Er wordt willekeurig één afgespeeld bij elke trigger.</p>
+				</div>
+			</div>
+			<div id="koos-songs-list" class="koos-songs-list">
+				<p class="koos-empty">Laden...</p>
+			</div>
+			<div class="koos-song-upload-form">
+				<input type="text" id="koos-song-name-input" placeholder="Naam van het nummer..." class="koos-name-input" />
+				<label class="btn-secondary koos-upload-label">
+					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+					MP3 uploaden
+					<input type="file" id="koos-song-input" accept="audio/mpeg,audio/mp3,.mp3" hidden />
+				</label>
+			</div>
+			<div id="koos-upload-progress" class="koos-progress hidden">
+				<div class="koos-progress-bar" id="koos-progress-bar"></div>
+			</div>
+		</div>
+
+		<div class="koos-divider"></div>
+
+		<!-- Duration -->
+		<div class="koos-block">
+			<div class="koos-block-header">
+				<div>
+					<h3 class="koos-block-title">Afspeelduur</h3>
+					<p class="koos-block-desc">Seconden dat de muziek speelt voor automatisch stoppen.</p>
+				</div>
+				<div class="koos-duration-wrap">
+					<input type="number" id="koos-duration-input" min="5" max="300" value="15" class="koos-duration-input" />
+					<span class="koos-duration-unit">sec</span>
+				</div>
+			</div>
+		</div>
+
+	</div>
+</div>
+
 <script>
 	import { supabase } from '../lib/supabase';
 
-	// Sidebar toggle
+	// ---- Sidebar toggle ----
 	const sidebarToggle = document.getElementById('sidebar-toggle-checkbox') as HTMLInputElement;
 	if (sidebarToggle) {
-		const alwaysShow = localStorage.getItem('sidebar-always-show') === 'true';
-		sidebarToggle.checked = alwaysShow;
+		sidebarToggle.checked = localStorage.getItem('sidebar-always-show') === 'true';
 		sidebarToggle.addEventListener('change', () => {
 			localStorage.setItem('sidebar-always-show', sidebarToggle.checked ? 'true' : 'false');
 			window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { alwaysShow: sidebarToggle.checked } }));
 		});
 	}
 
+	// ---- Drawer open/close ----
+	const drawer = document.getElementById('koos-drawer')!;
+	const backdrop = document.getElementById('koos-drawer-backdrop')!;
+
+	function openDrawer() {
+		drawer.classList.add('koos-drawer-open');
+		backdrop.classList.add('koos-drawer-open');
+		loadPhotos();
+		syncStorageToTable().then(() => loadSongs());
+	}
+	function closeDrawer() {
+		drawer.classList.remove('koos-drawer-open');
+		backdrop.classList.remove('koos-drawer-open');
+	}
+
+	document.getElementById('open-koos-drawer')?.addEventListener('click', openDrawer);
+	document.getElementById('close-koos-drawer')?.addEventListener('click', closeDrawer);
+	backdrop.addEventListener('click', closeDrawer);
+
+	// ---- Helpers ----
 	function getPublicUrl(path: string) {
 		return supabase.storage.from('koos-alberts').getPublicUrl(path).data.publicUrl;
 	}
-
 	const DELETE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H5c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
 	const EDIT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
 	const NOTE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="koos-note-icon"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
@@ -168,7 +205,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 				<button class="koos-photo-delete btn-icon" data-name="${photo.name}" title="Verwijder">${DELETE_ICON}</button>
 			</div>
 		`).join('');
-
 		photoGrid.querySelectorAll('.koos-photo-delete').forEach(btn => {
 			btn.addEventListener('click', async (e) => {
 				const name = (e.currentTarget as HTMLElement).dataset.name!;
@@ -183,8 +219,7 @@ import AppLayout from '../layouts/AppLayout.astro';
 		const file = photoInput.files?.[0];
 		if (!file) return;
 		const ext = file.name.split('.').pop();
-		const fileName = `koos-${Date.now()}.${ext}`;
-		const { error } = await supabase.storage.from('koos-alberts').upload(`photo/${fileName}`, file);
+		const { error } = await supabase.storage.from('koos-alberts').upload(`photo/koos-${Date.now()}.${ext}`, file);
 		if (error) { alert('Upload mislukt: ' + error.message); return; }
 		photoInput.value = '';
 		loadPhotos();
@@ -217,16 +252,8 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	async function loadSongs() {
 		const { data, error } = await supabase.from('koos_songs').select('*').order('created_at', { ascending: false });
-		if (error) {
-			songsList.innerHTML = `<p class="koos-empty">Fout bij laden: ${error.message}</p>`;
-			songCount.textContent = '';
-			return;
-		}
-		if (!data?.length) {
-			songsList.innerHTML = '<p class="koos-empty">Geen nummers geüpload.</p>';
-			songCount.textContent = '';
-			return;
-		}
+		if (error) { songsList.innerHTML = `<p class="koos-empty">Fout: ${error.message}</p>`; songCount.textContent = ''; return; }
+		if (!data?.length) { songsList.innerHTML = '<p class="koos-empty">Geen nummers geüpload.</p>'; songCount.textContent = ''; return; }
 
 		songCount.textContent = `(${data.length})`;
 		songsList.innerHTML = data.map((song: any) => `
@@ -243,7 +270,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 			</div>
 		`).join('');
 
-		// Edit name — explicit save/cancel buttons
 		document.querySelectorAll('.koos-edit-song').forEach(btn => {
 			btn.addEventListener('mousedown', (e) => {
 				e.preventDefault();
@@ -255,58 +281,38 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 				const wrap = document.createElement('div');
 				wrap.className = 'koos-edit-wrap';
-
 				const input = document.createElement('input');
-				input.type = 'text';
-				input.className = 'koos-name-edit-input';
-				input.value = currentName;
-
+				input.type = 'text'; input.className = 'koos-name-edit-input'; input.value = currentName;
 				const saveBtn = document.createElement('button');
-				saveBtn.className = 'btn-icon koos-save-btn';
-				saveBtn.title = 'Opslaan';
+				saveBtn.className = 'btn-icon koos-save-btn'; saveBtn.title = 'Opslaan';
 				saveBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-
 				const cancelBtn = document.createElement('button');
-				cancelBtn.className = 'btn-icon koos-cancel-btn';
-				cancelBtn.title = 'Annuleren';
+				cancelBtn.className = 'btn-icon koos-cancel-btn'; cancelBtn.title = 'Annuleren';
 				cancelBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-
-				wrap.appendChild(input);
-				wrap.appendChild(saveBtn);
-				wrap.appendChild(cancelBtn);
+				wrap.appendChild(input); wrap.appendChild(saveBtn); wrap.appendChild(cancelBtn);
 				nameSpan.replaceWith(wrap);
-				input.focus();
-				input.select();
+				input.focus(); input.select();
 
 				const save = async () => {
 					const newName = input.value.trim();
-					if (newName && newName !== currentName) {
-						await supabase.from('koos_songs').update({ display_name: newName }).eq('id', id);
-					}
+					if (newName && newName !== currentName) await supabase.from('koos_songs').update({ display_name: newName }).eq('id', id);
 					loadSongs();
 				};
-
 				saveBtn.addEventListener('mousedown', (ev) => { ev.preventDefault(); save(); });
 				cancelBtn.addEventListener('mousedown', (ev) => { ev.preventDefault(); loadSongs(); });
-				input.addEventListener('keydown', (ev) => {
-					if (ev.key === 'Enter') { ev.preventDefault(); save(); }
-					if (ev.key === 'Escape') loadSongs();
-				});
+				input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save(); } if (ev.key === 'Escape') loadSongs(); });
 			});
 		});
 
-		// Delete
 		document.querySelectorAll('.koos-delete-song').forEach(btn => {
 			btn.addEventListener('click', async (e) => {
 				const row = (e.currentTarget as HTMLElement).closest('.koos-song-row') as HTMLElement;
-				const id = row.dataset.id!;
-				const path = row.dataset.path!;
+				const id = row.dataset.id!; const path = row.dataset.path!;
 				const name = row.querySelector('.koos-song-name')?.textContent || path;
 				if (!confirm(`"${name}" verwijderen?`)) return;
 				await supabase.storage.from('koos-alberts').remove([path]);
 				const { error } = await supabase.from('koos_songs').delete().eq('id', id);
-				if (error) alert(error.message);
-				else loadSongs();
+				if (error) alert(error.message); else loadSongs();
 			});
 		});
 	}
@@ -315,24 +321,16 @@ import AppLayout from '../layouts/AppLayout.astro';
 		const file = songInput.files?.[0];
 		if (!file) return;
 		const displayName = songNameInput?.value.trim() || file.name.replace(/\.[^/.]+$/, '');
-
-		progressWrap.classList.remove('hidden');
-		progressBar.style.width = '10%';
-
-		const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-		const filePath = `songs/${safeName}`;
-
+		progressWrap.classList.remove('hidden'); progressBar.style.width = '10%';
+		const filePath = `songs/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 		const { error: uploadError } = await supabase.storage.from('koos-alberts').upload(filePath, file);
 		progressBar.style.width = '70%';
 		if (uploadError) { alert('Upload mislukt: ' + uploadError.message); progressWrap.classList.add('hidden'); return; }
-
 		const { error: dbError } = await supabase.from('koos_songs').insert({ file_path: filePath, display_name: displayName });
 		progressBar.style.width = '100%';
 		setTimeout(() => progressWrap.classList.add('hidden'), 600);
-
 		if (dbError) { alert('Opslaan mislukt: ' + dbError.message); return; }
-		songInput.value = '';
-		if (songNameInput) songNameInput.value = '';
+		songInput.value = ''; if (songNameInput) songNameInput.value = '';
 		loadSongs();
 	});
 
@@ -346,10 +344,6 @@ import AppLayout from '../layouts/AppLayout.astro';
 			localStorage.setItem('koos-duration', String(val));
 		});
 	}
-
-	// Init
-	loadPhotos();
-	syncStorageToTable().then(() => loadSongs());
 </script>
 
 <style is:global>
@@ -370,10 +364,9 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	.switch { position: relative; display: inline-block; width: 50px; height: 24px; flex-shrink: 0; }
 	.switch input { opacity: 0; width: 0; height: 0; }
-	.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-border); transition: .4s; }
+	.slider { position: absolute; cursor: pointer; inset: 0; background-color: var(--color-border); transition: .4s; }
 	.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; }
 	input:checked + .slider { background-color: var(--color-primary); }
-	input:focus + .slider { box-shadow: 0 0 1px var(--color-primary); }
 	input:checked + .slider:before { transform: translateX(26px); }
 	.slider.round { border-radius: 24px; }
 	.slider.round:before { border-radius: 50%; }
@@ -383,25 +376,49 @@ import AppLayout from '../layouts/AppLayout.astro';
 	.url-display a:hover { text-decoration: underline; }
 	.external-icon { color: var(--color-text-muted); flex-shrink: 0; margin-left: 0.75rem; }
 
-	/* Koos Section */
-	.koos-section { border-top: 3px solid var(--color-primary); }
-	.koos-section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
-	.koos-badge { background: var(--color-primary-dim, rgba(197,160,89,0.15)); color: var(--color-primary); font-size: 0.75rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 100px; border: 1px solid var(--color-primary); white-space: nowrap; align-self: center; }
+	/* Koos Drawer */
+	.koos-drawer-backdrop {
+		display: none;
+		position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+		z-index: 200; backdrop-filter: blur(2px);
+	}
+	.koos-drawer-backdrop.koos-drawer-open { display: block; }
 
-	.koos-block { margin-bottom: 0.5rem; }
+	.koos-drawer {
+		position: fixed; top: 0; right: -560px; width: 540px; max-width: 100vw;
+		height: 100vh; background: var(--color-card); border-left: 1px solid var(--color-border);
+		z-index: 201; display: flex; flex-direction: column;
+		transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+		box-shadow: -8px 0 40px rgba(0,0,0,0.3);
+	}
+	.koos-drawer.koos-drawer-open { right: 0; }
+
+	.koos-drawer-header {
+		display: flex; align-items: center; justify-content: space-between;
+		padding: 2rem 2rem 1.5rem;
+		border-bottom: 1px solid var(--color-border);
+		flex-shrink: 0;
+	}
+	.koos-drawer-header h2 { font-size: 1.5rem; margin: 0; }
+	.koos-drawer-sub { font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.2rem; }
+	.koos-close-btn { width: 36px; height: 36px; flex-shrink: 0; }
+
+	.koos-drawer-body { flex: 1; overflow-y: auto; padding: 2rem; display: flex; flex-direction: column; gap: 0; }
+
+	/* Koos blocks */
+	.koos-block { }
 	.koos-block-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-	.koos-block-title { font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.2rem; }
+	.koos-block-title { font-size: 0.95rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.2rem; }
 	.koos-block-desc { font-size: 0.82rem; color: var(--color-text-muted); }
-
 	.koos-count { font-size: 0.8rem; color: var(--color-text-muted); font-weight: 400; margin-left: 0.3rem; }
-	.koos-divider { height: 1px; background: var(--color-border); margin: 2rem 0; }
-	.koos-empty { color: var(--color-text-muted); font-style: italic; font-size: 0.9rem; padding: 0.5rem 0; }
+	.koos-divider { height: 1px; background: var(--color-border); margin: 1.5rem 0; }
+	.koos-empty { color: var(--color-text-muted); font-style: italic; font-size: 0.88rem; padding: 0.25rem 0; }
 
 	/* Photo grid */
 	.koos-photo-grid { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 	.koos-photo-item { position: relative; display: inline-block; }
-	.koos-thumb { width: 120px; height: 150px; object-fit: contain; border-radius: 8px; border: 2px solid var(--color-border); display: block; background: var(--color-surface); }
-	.koos-photo-delete { position: absolute; top: 0.4rem; right: 0.4rem; background: rgba(0,0,0,0.75); border-color: transparent; padding: 0.3rem; }
+	.koos-thumb { width: 110px; height: 138px; object-fit: contain; border-radius: 8px; border: 2px solid var(--color-border); display: block; background: var(--color-surface); }
+	.koos-photo-delete { position: absolute; top: 0.35rem; right: 0.35rem; background: rgba(0,0,0,0.75); border-color: transparent; padding: 0.3rem; }
 	.koos-photo-delete:hover { border-color: #fecaca; color: #fecaca; }
 
 	/* Upload label */
@@ -409,27 +426,27 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	/* Song upload form */
 	.koos-song-upload-form { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
-	.koos-name-input { flex: 1; min-width: 200px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); font-size: 0.85rem; padding: 0.5rem 0.75rem; outline: none; }
+	.koos-name-input { flex: 1; min-width: 160px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); font-size: 0.85rem; padding: 0.5rem 0.75rem; outline: none; }
 	.koos-name-input:focus { border-color: var(--color-primary); }
 	.koos-name-input::placeholder { color: var(--color-text-muted); }
 
 	/* Songs list */
-	.koos-songs-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.5rem; }
-	.koos-song-row { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; gap: 1rem; }
-	.koos-song-info { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1; }
+	.koos-songs-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.25rem; }
+	.koos-song-row { display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.85rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; gap: 0.75rem; }
+	.koos-song-info { display: flex; align-items: center; gap: 0.5rem; min-width: 0; flex: 1; }
 	.koos-note-icon { color: var(--color-primary); flex-shrink: 0; }
 	.koos-song-name { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.koos-song-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
-	.koos-preview-audio { height: 28px; width: 180px; accent-color: var(--color-primary); }
+	.koos-song-actions { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+	.koos-preview-audio { height: 26px; width: 150px; accent-color: var(--color-primary); }
 	.koos-delete-song:hover { border-color: #fecaca; color: #fecaca; }
 
 	/* Inline edit */
-	.koos-edit-wrap { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 0; }
+	.koos-edit-wrap { display: flex; align-items: center; gap: 0.35rem; flex: 1; min-width: 0; }
 	.koos-name-edit-input { flex: 1; background: var(--color-bg); border: 1px solid var(--color-primary); border-radius: 6px; color: var(--color-text); font-size: 0.85rem; padding: 0.3rem 0.5rem; outline: none; min-width: 0; }
 	.koos-save-btn { border-color: transparent; color: #4ade80; }
-	.koos-save-btn:hover { border-color: #4ade80; color: #4ade80; }
+	.koos-save-btn:hover { border-color: #4ade80; color: #4ade80; background: rgba(74,222,128,0.1); }
 	.koos-cancel-btn { border-color: transparent; }
-	.koos-cancel-btn:hover { border-color: #fecaca; color: #fecaca; }
+	.koos-cancel-btn:hover { border-color: #fecaca; color: #fecaca; background: rgba(254,202,202,0.1); }
 
 	/* Duration */
 	.koos-duration-wrap { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
@@ -444,13 +461,11 @@ import AppLayout from '../layouts/AppLayout.astro';
 
 	.btn-icon { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 0.4rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; }
 	.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
-
 	.gold-text { color: var(--color-primary); }
 	.italic { font-style: italic; }
 
-	@media (max-width: 700px) {
-		.koos-section-header { flex-direction: column; }
-		.koos-block-header { flex-direction: column; }
+	@media (max-width: 600px) {
+		.koos-drawer { width: 100vw; }
 		.koos-song-row { flex-direction: column; align-items: flex-start; }
 		.koos-preview-audio { width: 100%; }
 	}
