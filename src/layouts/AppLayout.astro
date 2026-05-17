@@ -508,19 +508,63 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 	let koosAudio: HTMLAudioElement | null = null;
 	let koosTimer: ReturnType<typeof setTimeout> | null = null;
 
+	function setKoosSongLabel(title: string) {
+		const el = document.getElementById('koos-song-title');
+		const mini = document.getElementById('koos-mini-title');
+		if (el) el.textContent = title;
+		if (mini) mini.textContent = title;
+	}
+
+	function saveKoosState() {
+		if (!koosAudio || koosAudio.paused) { sessionStorage.removeItem('koosState'); return; }
+		const overlay = document.getElementById('koos-overlay');
+		const photoImg = document.getElementById('koos-photo-img') as HTMLImageElement;
+		sessionStorage.setItem('koosState', JSON.stringify({
+			songUrl: koosAudio.src,
+			songTitle: document.getElementById('koos-song-title')?.textContent || '',
+			photoSrc: photoImg?.src || '',
+			currentTime: koosAudio.currentTime,
+			minimized: overlay?.classList.contains('koos-minimized') ?? false
+		}));
+	}
+
+	function restoreKoosState() {
+		const raw = sessionStorage.getItem('koosState');
+		if (!raw) return;
+		try {
+			const state = JSON.parse(raw);
+			const photoImg = document.getElementById('koos-photo-img') as HTMLImageElement;
+			const overlay = document.getElementById('koos-overlay');
+			setKoosSongLabel(state.songTitle || '');
+			if (photoImg && state.photoSrc) { photoImg.src = state.photoSrc; photoImg.style.display = 'block'; }
+			if (koosAudio) { koosAudio.pause(); koosAudio = null; }
+			koosAudio = new Audio(state.songUrl);
+			koosAudio.addEventListener('canplay', () => {
+				if (koosAudio && state.currentTime > 0) koosAudio.currentTime = state.currentTime;
+			}, { once: true });
+			koosAudio.play().catch(() => {});
+			if (overlay) {
+				overlay.classList.add('koos-active');
+				if (state.minimized) overlay.classList.add('koos-minimized');
+			}
+			setAutoCloseTimer();
+		} catch {}
+	}
+
+	function setAutoCloseTimer() {
+		if (koosTimer) clearTimeout(koosTimer);
+		const koosDuration = Math.min(300, Math.max(5, parseInt(localStorage.getItem('koos-duration') || '15'))) * 1000;
+		koosTimer = setTimeout(closeKoos, koosDuration);
+	}
+
 	async function triggerKoosEasterEgg() {
-		// Fetch random song from koos_songs table (has display_name)
 		const { data: songs } = await supabase.from('koos_songs').select('*');
 		if (!songs?.length) return;
 
 		const pick = songs[Math.floor(Math.random() * songs.length)];
 		const songUrl = supabase.storage.from('koos-alberts').getPublicUrl(pick.file_path).data.publicUrl;
+		setKoosSongLabel(pick.display_name || '');
 
-		// Show song name on overlay
-		const songTitle = document.getElementById('koos-song-title');
-		if (songTitle) songTitle.textContent = pick.display_name || '';
-
-		// Fetch random photo
 		const { data: photos } = await supabase.storage.from('koos-alberts').list('photo');
 		const photoImg = document.getElementById('koos-photo-img') as HTMLImageElement;
 		const validPhotos = (photos || []).filter(p => p.name !== '.emptyFolderPlaceholder');
@@ -532,36 +576,53 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 			photoImg.style.display = 'none';
 		}
 
-		// Stop any previous audio and start new one
+		// Make sure overlay is not minimized on fresh trigger
+		document.getElementById('koos-overlay')?.classList.remove('koos-minimized');
+
 		if (koosAudio) { koosAudio.pause(); koosAudio = null; }
 		koosAudio = new Audio(songUrl);
 		koosAudio.play().catch(() => {});
 
-		// Wait 1.2s before sliding the photo up
-		await new Promise(r => setTimeout(r, 1200));
-		document.getElementById('koos-overlay')?.classList.add('koos-active');
-
-		// Reset input if triggered from search
+		// Reset search input
 		const inp = document.getElementById('global-search-input') as HTMLInputElement;
 		if (inp) inp.value = '';
 
-		// Auto-close after configured duration (default 15s)
-		const koosDuration = Math.min(300, Math.max(5, parseInt(localStorage.getItem('koos-duration') || '15'))) * 1000;
-		if (koosTimer) clearTimeout(koosTimer);
-		koosTimer = setTimeout(closeKoos, koosDuration);
+		// Wait before photo slides up
+		await new Promise(r => setTimeout(r, 1200));
+		document.getElementById('koos-overlay')?.classList.add('koos-active');
+		setAutoCloseTimer();
 	}
 
 	function closeKoos() {
-		document.getElementById('koos-overlay')?.classList.remove('koos-active');
+		sessionStorage.removeItem('koosState');
+		const overlay = document.getElementById('koos-overlay');
+		overlay?.classList.remove('koos-active', 'koos-minimized');
 		if (koosAudio) { koosAudio.pause(); koosAudio = null; }
 		if (koosTimer) { clearTimeout(koosTimer); koosTimer = null; }
 	}
 
-	// Logo click trigger
-	document.getElementById('koos-logo-trigger')?.addEventListener('click', triggerKoosEasterEgg);
+	function minimizeKoos() {
+		document.getElementById('koos-overlay')?.classList.add('koos-minimized');
+		saveKoosState();
+	}
 
-	// Koos overlay click to close
-	document.getElementById('koos-overlay')?.addEventListener('click', closeKoos);
+	function expandKoos() {
+		document.getElementById('koos-overlay')?.classList.remove('koos-minimized');
+		saveKoosState();
+	}
+
+	// Save state before navigation
+	window.addEventListener('beforeunload', saveKoosState);
+
+	// Restore if navigated away while playing
+	restoreKoosState();
+
+	// Controls
+	document.getElementById('koos-logo-trigger')?.addEventListener('click', triggerKoosEasterEgg);
+	document.getElementById('koos-minimize-btn')?.addEventListener('click', (e) => { e.stopPropagation(); minimizeKoos(); });
+	document.getElementById('koos-expand-btn')?.addEventListener('click', (e) => { e.stopPropagation(); expandKoos(); });
+	document.getElementById('koos-close-btn')?.addEventListener('click', (e) => { e.stopPropagation(); closeKoos(); });
+	document.getElementById('koos-close-mini-btn')?.addEventListener('click', (e) => { e.stopPropagation(); closeKoos(); });
 
 	// Search "koosje" + Enter trigger
 	document.getElementById('global-search-input')?.addEventListener('keydown', (e) => {
@@ -883,9 +944,31 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 
 	<!-- Koos Alberts Easter Egg Overlay -->
 	<div id="koos-overlay" class="koos-overlay">
-		<div class="koos-name serif">Koos Alberts</div>
-		<img id="koos-photo-img" class="koos-photo-img" src="" alt="Koos Alberts" />
-		<div id="koos-song-title" class="koos-song-title serif"></div>
+		<!-- Full view -->
+		<div id="koos-full-view" class="koos-full-view">
+			<div class="koos-overlay-controls">
+				<button id="koos-minimize-btn" class="koos-ctrl-btn" title="Inklappen">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+				</button>
+				<button id="koos-close-btn" class="koos-ctrl-btn koos-close-ctrl" title="Stoppen">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+				</button>
+			</div>
+			<div class="koos-name serif">Koos Alberts</div>
+			<img id="koos-photo-img" class="koos-photo-img" src="" alt="Koos Alberts" />
+			<div id="koos-song-title" class="koos-song-title serif"></div>
+		</div>
+		<!-- Mini bar (shown when minimized) -->
+		<div id="koos-mini-bar" class="koos-mini-bar">
+			<span class="koos-mini-note">♪</span>
+			<span id="koos-mini-title" class="koos-mini-title serif"></span>
+			<button id="koos-expand-btn" class="koos-ctrl-btn" title="Uitklappen">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+			</button>
+			<button id="koos-close-mini-btn" class="koos-ctrl-btn koos-close-ctrl" title="Stoppen">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+			</button>
+		</div>
 	</div>
 </Layout>
 
@@ -924,6 +1007,34 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		transform: translate(-50%, 0);
 		pointer-events: all;
 	}
+	/* Minimized: override the slow transition for snappy collapse */
+	.koos-overlay.koos-minimized {
+		transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	/* Full view */
+	.koos-full-view { position: relative; }
+	.koos-overlay.koos-minimized .koos-full-view { display: none; }
+
+	.koos-overlay-controls {
+		position: absolute;
+		top: 0.5rem; right: 0.5rem;
+		display: flex; gap: 0.35rem; z-index: 1;
+	}
+	.koos-ctrl-btn {
+		background: rgba(0,0,0,0.55);
+		border: 1px solid rgba(255,255,255,0.15);
+		color: rgba(255,255,255,0.8);
+		border-radius: 6px;
+		padding: 0.3rem;
+		cursor: pointer;
+		display: inline-flex; align-items: center; justify-content: center;
+		transition: background 0.2s, color 0.2s;
+		backdrop-filter: blur(4px);
+	}
+	.koos-ctrl-btn:hover { background: rgba(0,0,0,0.8); color: #fff; }
+	.koos-close-ctrl:hover { color: #fca5a5; }
+
 	.koos-name {
 		font-size: 3rem;
 		color: var(--color-primary);
@@ -937,7 +1048,6 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		max-width: 92vw;
 		display: block;
 		object-fit: contain;
-		cursor: pointer;
 	}
 	.koos-song-title {
 		font-size: 1.35rem;
@@ -948,9 +1058,34 @@ const ssrMoreActive = ssrHiddenTabs.some(h => h.id === ssrActiveId);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 420px;
-		cursor: pointer;
 		letter-spacing: 0.02em;
 	}
+
+	/* Mini bar */
+	.koos-mini-bar { display: none; }
+	.koos-overlay.koos-minimized .koos-mini-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		background: var(--color-card);
+		border: 1px solid var(--color-primary);
+		border-bottom: none;
+		border-radius: 10px 10px 0 0;
+		padding: 0.6rem 1rem;
+		min-width: 260px;
+		max-width: 92vw;
+		box-shadow: 0 -4px 20px rgba(197,160,89,0.2);
+	}
+	.koos-mini-note { color: var(--color-primary); font-size: 1rem; flex-shrink: 0; }
+	.koos-mini-title {
+		flex: 1; font-size: 0.9rem; color: var(--color-text);
+		white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	}
+	.koos-mini-bar .koos-ctrl-btn {
+		background: transparent; border-color: var(--color-border);
+		color: var(--color-text-muted);
+	}
+	.koos-mini-bar .koos-ctrl-btn:hover { background: var(--color-surface); color: var(--color-text); }
 	.logo {
 		width: 32px; height: 32px; border: 1px solid var(--color-primary);
 		color: var(--color-primary); display: flex; align-items: center;
